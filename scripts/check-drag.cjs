@@ -40,9 +40,16 @@ const fs=require('node:fs/promises');
     assert.equal(await page.locator('#preview-wheel [data-wheel-id]').count(),2);
     await page.locator('[data-command="group-back"]').click();
     console.log('PASS: repeated moves append in order, survive reload and appear in nested wheel');
-    // An ordinary click still edits; protected row buttons remain clickable.
-    await row('adobe').click();await page.getByRole('dialog').waitFor();
+    // An ordinary group-row click opens its children; the pencil explicitly edits.
+    await row('adobe').locator('.action-copy').click();
+    await row('after-effects').waitFor();await row('illustrator').waitFor();
+    assert.equal(await page.getByRole('dialog').count(),0);
+    assert.equal(await page.locator('#preview-wheel [data-wheel-id]').count(),2);
+    await page.locator('[data-command="group-back"]').click();
+    await row('adobe').locator('[data-edit-id="adobe"]').click();await page.getByRole('dialog').waitFor();
+    assert.equal(await page.getByRole('dialog').locator('#action-name').inputValue(),'Adobe');
     await page.getByRole('dialog').getByRole('button',{name:'Скасувати',exact:true}).click();
+    console.log('PASS: group row click opens its nested wheel and explicit pencil edits the group');
     const beforeInvalid=await page.evaluate(()=>window.orbit.getState());
     await row('tools').locator('.action-copy').dragTo(row('full'));
     assert.deepEqual(await page.evaluate(()=>window.orbit.getState()),beforeInvalid);

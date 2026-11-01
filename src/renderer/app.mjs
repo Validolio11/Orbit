@@ -20,6 +20,16 @@ const currentMenu=()=>state.menus.find(m=>m.id===state.activeMenuId)||state.menu
 function currentGroup(){let value={items:currentMenu().items,name:currentMenu().name};for(const id of groupPath){const item=value.items.find(i=>i.id===id);if(!item||item.kind!=='group')break;value={...item,items:item.children};}return value;}
 function locate(id){for(const menu of state.menus){const walk=(items,path=[])=>{for(let i=0;i<items.length;i++){if(items[i].id===id)return {item:items[i],items,index:i,menu,path};if(items[i].kind==='group'){const found=walk(items[i].children,[...path,items[i].id]);if(found)return found;}}};const found=walk(menu.items);if(found)return found;}return null;}
 function flatten(){const result=[];for(const menu of state.menus){const walk=(items,path=[])=>items.forEach(item=>{result.push({item,menu,path});if(item.kind==='group')walk(item.children,[...path,item.name]);});walk(menu.items);}return result;}
+async function openEditorGroup(id){
+  const found=locate(id);if(!found||found.item.kind!=='group')return;
+  if(state.activeMenuId!==found.menu.id&&!await change({activeMenuId:found.menu.id}))return;
+  groupPath=[...found.path,found.item.id];page='menus';selectedId='';render();
+}
+async function activateEditorItem(id){
+  const found=locate(id);if(!found)return;
+  if(found.item.kind==='group'){await openEditorGroup(id);return;}
+  selectedId=id;actionDialog(id);render();
+}
 function applyTheme(){const theme=state.theme==='system'?(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):state.theme;document.documentElement.dataset.theme=theme;document.documentElement.dataset.reducedMotion=String(state.reducedMotion);}
 function toast(message,error=false){const target=document.querySelector('#toast');clearTimeout(toastTimer);target.textContent=message;target.className='visible'+(error?' error':'');toastTimer=setTimeout(()=>target.className='',error?6000:2500);}
 async function save(next,message){try{state=await api.saveState(next);applyTheme();if(!overlay)render();if(message)toast(message);return true;}catch(error){toast(error.message.replace(/^Error invoking remote method '[^']+': (Error: )?/,''),true);return false;}}
@@ -67,7 +77,7 @@ function menusPage(){
 }
 function actionDescription(item){if(item.kind==='group')return `${item.children.length} ${item.children.length===1?'дія':'дій'} у вкладеному меню`;if(item.kind==='system')return systemNames[item.target]||'Системна команда';return item.target||'Виберіть шлях до застосунку';}
 function actionRow(item,index,library=false,context=''){
-  return `<div class="action-row ${selectedId===item.id?'selected':''}" data-row-id="${e(item.id)}" ${!library?`draggable="true" title="Перетягніть у групу" ${item.kind==='group'?`data-drop-group="${e(item.id)}"`:''}`:''} tabindex="0" role="button" aria-label="Редагувати ${e(item.name)}">${!library?`<span class="action-number">${String(index+1).padStart(2,'0')}</span>`:''}<span class="action-icon">${itemIcon(item,19)}</span><div class="action-copy"><div class="action-name">${e(item.name)}</div><div class="action-desc" title="${e(actionDescription(item))}">${e(context||actionDescription(item))}</div>${!library&&item.kind==='group'?'<div class="action-drop-message" aria-live="polite"></div>':''}</div>${library?`<span class="type-badge">${kinds[item.kind]}</span>`:''}<div class="action-tools">${!library?`<button class="icon-btn reorder" data-move-id="${e(item.id)}" data-direction="-1" aria-label="Перемістити ${e(item.name)} вище" ${index===0?'disabled':''}>${icon('arrowUp',12)}</button>`:''}${item.kind==='group'?`<button class="icon-btn" data-open-group="${e(item.id)}" aria-label="Відкрити групу ${e(item.name)}">${icon('chevron',15)}</button><button class="icon-btn danger" data-delete-group="${e(item.id)}" aria-label="Видалити групу ${e(item.name)}" title="Видалити групу">${icon('trash',13)}</button>`:`<button class="icon-btn" data-edit-id="${e(item.id)}" aria-label="Редагувати ${e(item.name)}">${icon('edit',13)}</button><button class="icon-btn danger" data-delete-action="${e(item.id)}" aria-label="Видалити дію ${e(item.name)}" title="Видалити дію">${icon('trash',13)}</button>`}</div></div>`;
+  return `<div class="action-row ${selectedId===item.id?'selected':''}" data-row-id="${e(item.id)}" ${!library?`draggable="true" title="Перетягніть у групу" ${item.kind==='group'?`data-drop-group="${e(item.id)}"`:''}`:''} tabindex="0" role="button" aria-label="${item.kind==='group'?'Відкрити':'Редагувати'} ${e(item.name)}">${!library?`<span class="action-number">${String(index+1).padStart(2,'0')}</span>`:''}<span class="action-icon">${itemIcon(item,19)}</span><div class="action-copy"><div class="action-name">${e(item.name)}</div><div class="action-desc" title="${e(actionDescription(item))}">${e(context||actionDescription(item))}</div>${!library&&item.kind==='group'?'<div class="action-drop-message" aria-live="polite"></div>':''}</div>${library?`<span class="type-badge">${kinds[item.kind]}</span>`:''}<div class="action-tools">${!library?`<button class="icon-btn reorder" data-move-id="${e(item.id)}" data-direction="-1" aria-label="Перемістити ${e(item.name)} вище" ${index===0?'disabled':''}>${icon('arrowUp',12)}</button>`:''}${item.kind==='group'?`<button class="icon-btn" data-open-group="${e(item.id)}" aria-label="Відкрити групу ${e(item.name)}">${icon('chevron',15)}</button><button class="icon-btn" data-edit-id="${e(item.id)}" aria-label="Редагувати ${e(item.name)}" title="Редагувати групу">${icon('edit',13)}</button><button class="icon-btn danger" data-delete-group="${e(item.id)}" aria-label="Видалити групу ${e(item.name)}" title="Видалити групу">${icon('trash',13)}</button>`:`<button class="icon-btn" data-edit-id="${e(item.id)}" aria-label="Редагувати ${e(item.name)}">${icon('edit',13)}</button><button class="icon-btn danger" data-delete-action="${e(item.id)}" aria-label="Видалити дію ${e(item.name)}" title="Видалити дію">${icon('trash',13)}</button>`}</div></div>`;
 }
 function libraryPage(){
   const entries=flatten().filter(({item,path,menu})=>(item.name+' '+kinds[item.kind]+' '+menu.name+' '+path.join(' ')).toLowerCase().includes(search.toLowerCase()));
@@ -144,9 +154,9 @@ root.addEventListener('click',async event=>{
   const button=event.target.closest('button');
   if(button?.dataset.page){page=button.dataset.page;groupPath=[];render();return;}
   if(button?.dataset.menuId){groupPath=[];selectedId='';await change({activeMenuId:button.dataset.menuId});return;}
-  if(button?.dataset.wheelId&&!overlay){selectedId=button.dataset.wheelId;actionDialog(selectedId);render();return;}
+  if(button?.dataset.wheelId&&!overlay){await activateEditorItem(button.dataset.wheelId);return;}
   if(button?.hasAttribute('data-wheel-back')&&!overlay){groupPath.pop();render();return;}
-  if(button?.dataset.openGroup){const found=locate(button.dataset.openGroup);if(found){if(state.activeMenuId!==found.menu.id&&!await change({activeMenuId:found.menu.id}))return;groupPath=[...found.path,found.item.id];page='menus';selectedId='';render();}return;}
+  if(button?.dataset.openGroup){await openEditorGroup(button.dataset.openGroup);return;}
   if(button?.dataset.editId){selectedId=button.dataset.editId;actionDialog(selectedId);return;}
   if(button?.dataset.deleteGroup){deleteDialog('action',button.dataset.deleteGroup);return;}
   if(button?.dataset.deleteAction){deleteDialog('action',button.dataset.deleteAction);return;}
@@ -155,8 +165,8 @@ root.addEventListener('click',async event=>{
   if(button?.dataset.themeValue){await change({theme:button.dataset.themeValue});return;}
   const command=button?.dataset.command;
   if(command){await runCommand(command);return;}
-  const row=event.target.closest('[data-row-id]');if(row&&!overlay){selectedId=row.dataset.rowId;actionDialog(selectedId);return;}
-  const sector=event.target.closest('[data-sector]');if(sector&&!overlay){selectedId=sector.dataset.sector;actionDialog(selectedId);}
+  const row=event.target.closest('[data-row-id]');if(row&&!overlay){await activateEditorItem(row.dataset.rowId);return;}
+  const sector=event.target.closest('[data-sector]');if(sector&&!overlay){await activateEditorItem(sector.dataset.sector);}
 });
 async function runCommand(command){
   try{
@@ -205,7 +215,7 @@ document.addEventListener('keydown',event=>{
   const dialog=document.querySelector('.modal');
   if(dialog){if(event.key==='Escape'){event.preventDefault();closeModal();}if(event.key==='Tab'){const focusable=[...dialog.querySelectorAll('button:not(:disabled),input,select,textarea')];const first=focusable[0],last=focusable.at(-1);if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}}return;}
   if(overlay){if(event.key==='Escape'){clearWheelTimers();wheelOpen=false;api.closeWheel();}else if(['ArrowRight','ArrowDown','ArrowLeft','ArrowUp'].includes(event.key)){event.preventDefault();const items=wheelItems();if(items.length)selectWheel((wheelSelected+(event.key==='ArrowLeft'||event.key==='ArrowUp'?-1:1)+items.length)%items.length,true);}else if(event.key==='Enter'){event.preventDefault();commitWheel();}else if(event.key==='Backspace'){event.preventDefault();wheelBack();}return;}
-  if(event.key==='Enter'&&event.target.matches('[data-row-id]')){event.preventDefault();actionDialog(event.target.dataset.rowId);}
+  if(event.key==='Enter'&&event.target.matches('[data-row-id]')){event.preventDefault();activateEditorItem(event.target.dataset.rowId);}
 });
 
 function wheelItems(){return wheelStack.length?wheelStack.at(-1).children:currentMenu().items;}

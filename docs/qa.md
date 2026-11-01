@@ -103,3 +103,9 @@ Remaining hardware validation: press Mouse4/Mouse5 on the user's actual mouse, e
 - Pure move tests cover regular/nested/cross-menu moves, immutable inputs, missing targets, cycles, full groups and the existing depth limit. `npm test`: 43 tests pass.
 - `npm run test:drag` exercises real mouse dragging, repeated moves, reload persistence, nested wheel contents, no accidental dialog, ordinary editing, full/self/outside rejection, nested-group preservation and target highlight. Existing full UI suite passes when run separately from other mouse-driven sessions. Capture: `output/playwright/drag-group-target.png`.
 - Packaged `0.1.2` passes the same real mouse drag scenario. The release retains the existing update feed and settings schema.
+
+## Editor group navigation · 0.1.3
+
+- Group icons, SVG sectors and action-list rows open the group's nested menu. Enter on a focused group row follows the same route. Ordinary actions retain their editor behavior; groups have a separate pencil button for editing. Existing center/back controls return to the parent.
+- Existing full UI suite passes with actual mouse checks for icon/sector/row navigation, row keyboard activation, center/back navigation, group pencil editing and ordinary-action editing. The drag suite also passes with the revised group-row behavior. User settings schema is unchanged.
+- The complete UI suite also passes against the packaged `0.1.3` executable (`npm run test:ui -- --packaged`).

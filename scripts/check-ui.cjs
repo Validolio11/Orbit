@@ -5,7 +5,8 @@ const fs = require('node:fs/promises');
 
 (async()=>{
   const project = path.resolve(__dirname, '..');
-  const app = await _electron.launch({args:[project,'--e2e'],executablePath:require('electron'),cwd:project});
+  const packaged=process.argv.includes('--packaged');
+  const app = await _electron.launch({args:packaged?['--e2e']:[project,'--e2e'],executablePath:packaged?path.join(project,'dist','Orbit-win32-x64','Orbit.exe'):require('electron'),cwd:project});
   const errors=[];
   try {
     await app.firstWindow();
@@ -52,6 +53,44 @@ const fs = require('node:fs/promises');
     await page.getByRole('button',{name:'Відкрити групу QA група',exact:true}).click();
     await add('system','QA вкладена дія','settings');
     await page.locator('[data-command="group-back"]').click();
+    saved=await page.evaluate(()=>window.orbit.getState());
+    const qaItems=saved.menus.find(menu=>menu.id===saved.activeMenuId).items;
+    const qaGroup=qaItems.find(item=>item.name==='QA група'),qaChild=qaGroup.children[0],qaFolder=qaItems.find(item=>item.name==='QA папка');
+    const groupRow=()=>page.locator(`.action-list [data-row-id="${qaGroup.id}"]`);
+    const expectNestedPreview=async()=>{
+      await page.locator(`#preview-wheel [data-wheel-id="${qaChild.id}"]`).waitFor();
+      assert.equal(await page.locator('#preview-wheel [data-wheel-id]').count(),1);
+      assert.equal(await dialog().count(),0,'Opening a preview group must not open the editor');
+    };
+    // Click the group icon itself, then the center to return to the parent wheel.
+    await page.locator(`#preview-wheel [data-wheel-id="${qaGroup.id}"] svg`).click();
+    await expectNestedPreview();
+    await page.locator('#preview-wheel [data-wheel-back]').click();
+    await groupRow().waitFor();
+    // Aim at the exposed outer ring of the SVG sector, away from its icon button.
+    const sectorPoint=await page.locator(`#preview-wheel [data-sector="${qaGroup.id}"]`).evaluate(sector=>{
+      const sectors=[...sector.parentElement.querySelectorAll('[data-sector]')];
+      const angle=(-90+sectors.indexOf(sector)*360/sectors.length)*Math.PI/180;
+      const bounds=sector.closest('svg').getBoundingClientRect();
+      return{x:bounds.left+bounds.width*(.5+195*Math.cos(angle)/480),y:bounds.top+bounds.height*(.5+195*Math.sin(angle)/480)};
+    });
+    await page.mouse.click(sectorPoint.x,sectorPoint.y);
+    await expectNestedPreview();
+    await command('group-back').click();
+    await groupRow().locator('.action-copy').click();
+    await expectNestedPreview();
+    await command('group-back').click();
+    await groupRow().focus();await groupRow().press('Enter');
+    await expectNestedPreview();
+    await command('group-back').click();
+    // The explicit pencil remains the group editor, and ordinary actions still edit.
+    await groupRow().locator(`[data-edit-id="${qaGroup.id}"]`).click();
+    await dialog().waitFor();assert.equal(await dialog().locator('#action-name').inputValue(),'QA група');
+    await modalButton('Скасувати').click();
+    await page.locator(`#preview-wheel [data-wheel-id="${qaFolder.id}"]`).click();
+    await dialog().waitFor();assert.equal(await dialog().locator('#action-name').inputValue(),'QA папка');
+    await modalButton('Скасувати').click();
+    console.log('PASS: preview group icon/sector and row click/Enter open children; center/back return; group pencil and ordinary actions edit');
     const before=(await page.locator('.action-name').allTextContents());
     await page.getByRole('button',{name:'Перемістити QA група вище',exact:true}).click();
     const after=await page.locator('.action-name').allTextContents();
