@@ -1,6 +1,7 @@
 import {icon,itemIcon,rememberAppIcon,hydrateAppIcons,systemIcons} from './icons.mjs';
 import {folderPickerFields,mountFolderPicker,folderName} from './folder-picker.mjs';
 import {scriptPickerFields,mountScriptPicker,scriptName} from './script-picker.mjs';
+import {groupPickerFields,mountGroupPicker} from './group-picker.mjs';
 import {escapeHTML as e,renderWheel,sectorAt} from './wheel.mjs';
 import {appPickerFields,mountAppPicker} from './app-picker.mjs';
 import {updatesSettings,refreshUpdates} from './updates.mjs';
@@ -159,16 +160,16 @@ function deleteDialog(type,id){const item=type==='menu'?currentMenu():locate(id)
 function actionDialog(id){
   let existing=id?locate(id)?.item:null;
   let draft=existing?structuredClone(existing):{id:uuid(),name:'',kind:'app',target:'',args:'',icon:'',children:[]};
-  const pickerConfig={query:existing?.kind==='app'?existing.name:'',selectedName:existing?.kind==='app'?existing.name:'',mode:/^https?:\/\//i.test(draft.target)?'url':'search',detailsOpen:!!draft.args,picked:existing?null:new Map()};
+  const pickerConfig={query:existing?.kind==='app'?existing.name:'',selectedName:existing?.kind==='app'?existing.name:'',mode:/^https?:\/\//i.test(draft.target)?'url':'search',detailsOpen:!!draft.args,picked:existing?null:new Map(),moveIds:existing?null:new Set()};
   let capture=()=>{};
-  const primaryLabel=()=>existing?'Зберегти':pickerConfig.picked?.size&&['app','folder','script'].includes(draft.kind)?`Додати вибрані (${pickerConfig.picked.size})`:'Додати дію';
+  const primaryLabel=()=>existing?'Зберегти':draft.kind==='group'?(pickerConfig.moveIds.size?`Створити групу (${pickerConfig.moveIds.size})`:'Створити групу'):pickerConfig.picked?.size&&['app','folder','script'].includes(draft.kind)?`Додати вибрані (${pickerConfig.picked.size})`:'Додати дію';
   // Names filled in by Orbit (a picked program, a Windows tile) are dropped when the type changes; typed ones stay.
   let nameTyped=!!existing;
   const parentGroup=currentGroup();if(!existing&&parentGroup.items.length>=12){toast('У цьому колесі вже 12 дій. Створіть групу або інше меню.',true);return;}
   function draw(){
-    const targetField=draft.kind==='app'?appPickerFields(draft,pickerConfig):draft.kind==='folder'?folderPickerFields(draft,pickerConfig):draft.kind==='group'?`<p class="field-note">Група відкриває вкладене колесо. Після створення вона одразу відкриється, щоб ви додали в неї дії.</p>`:draft.kind==='system'?`<div class="field"><span class="field-title" id="system-title">Команда Windows</span><div class="kind-choices system-choices" role="group" aria-labelledby="system-title">${Object.entries(systemNames).map(([value,label])=>`<button class="kind-choice system-choice ${draft.target===value?'active':''}" data-system="${value}" type="button" aria-pressed="${draft.target===value}">${icon(systemIcons[value],19)}<span>${label}</span></button>`).join('')}</div></div>`:scriptPickerFields(draft,pickerConfig);
+    const targetField=draft.kind==='app'?appPickerFields(draft,pickerConfig):draft.kind==='folder'?folderPickerFields(draft,pickerConfig):draft.kind==='group'?groupPickerFields(draft,pickerConfig,existing?[]:currentGroup().items):draft.kind==='system'?`<div class="field"><span class="field-title" id="system-title">Команда Windows</span><div class="kind-choices system-choices" role="group" aria-labelledby="system-title">${Object.entries(systemNames).map(([value,label])=>`<button class="kind-choice system-choice ${draft.target===value?'active':''}" data-system="${value}" type="button" aria-pressed="${draft.target===value}">${icon(systemIcons[value],19)}<span>${label}</span></button>`).join('')}</div></div>`:scriptPickerFields(draft,pickerConfig);
     // Windows commands are named by the chosen tile, so they need no name field.
-    const fields=['app','system','folder','script'].includes(draft.kind)?targetField:`<div class="field"><label for="action-name">Назва</label><input id="action-name" name="name" maxlength="100" value="${e(draft.name)}" placeholder="${{script:'Візьметься з назви файлу',group:'Наприклад, Монтаж'}[draft.kind]||''}" ${draft.kind==='group'?'required':''}></div>${targetField}`;
+    const fields=['app','system','folder','script','group'].includes(draft.kind)?targetField:`<div class="field"><label for="action-name">Назва</label><input id="action-name" name="name" maxlength="100" value="${e(draft.name)}" placeholder="${{script:'Візьметься з назви файлу',group:'Наприклад, Монтаж'}[draft.kind]||''}" ${draft.kind==='group'?'required':''}></div>${targetField}`;
     modal(existing?'Редагувати дію':'Додати дію',`<form class="modal-body" id="action-form"><div class="kind-choices" role="group" aria-label="Тип дії">${Object.entries(kinds).map(([kind,label])=>`<button class="kind-choice ${draft.kind===kind?'active':''}" data-kind="${kind}" type="button" aria-pressed="${draft.kind===kind}">${icon(kind,19)}${label}</button>`).join('')}</div>${fields}<p class="form-error" id="form-error" role="alert"></p></form>`,`${existing?`<button class="btn danger" type="button" id="delete-action">${icon('trash',14)}Видалити</button>`:''}<button class="btn" data-command="dismiss">Скасувати</button><button class="btn primary" type="submit" form="action-form">${primaryLabel()}</button>`,true);
     capture=()=>{
       const form=new FormData(document.querySelector('#action-form'));
@@ -186,10 +187,11 @@ function actionDialog(id){
     },onPickedChange:()=>{const button=document.querySelector('.modal-footer .primary');if(button)button.textContent=primaryLabel();},onModeChange:mode=>{capture();pickerConfig.mode=mode;pickerConfig.query='';pickerConfig.selectedName='';draft.target='';draft.args='';draw();queueMicrotask(()=>document.querySelector(mode==='url'?'#action-target':'#app-search')?.focus());}});
     if(draft.kind==='folder')modalCleanup=mountFolderPicker({form:document.querySelector('#action-form'),config:pickerConfig,onChoose:entry=>chooseFolder(entry.target,entry.name),onPickedChange:()=>{const button=document.querySelector('.modal-footer .primary');if(button)button.textContent=primaryLabel();}});
     document.querySelector('#action-name')?.addEventListener('input',()=>{nameTyped=true;});
+    if(draft.kind==='group')modalCleanup=mountGroupPicker({form:document.querySelector('#action-form'),draft,config:pickerConfig,onMoveChange:()=>{const button=document.querySelector('.modal-footer .primary');if(button)button.textContent=primaryLabel();}});
     if(draft.kind==='script')modalCleanup=mountScriptPicker({form:document.querySelector('#action-form'),config:pickerConfig,onChoose:entry=>chooseScript(entry.target),onPickedChange:()=>{const button=document.querySelector('.modal-footer .primary');if(button)button.textContent=primaryLabel();}});
     document.querySelector('#browse-script')?.addEventListener('click',async()=>{try{const value=await api.pickTarget('script');if(value)chooseScript(value);}catch(error){document.querySelector('#form-error').textContent=error.message;}});
     document.querySelector('#browse-folder')?.addEventListener('click',async()=>{try{const value=await api.pickTarget('folder');if(value)chooseFolder(value,folderName(value));}catch(error){document.querySelector('#form-error').textContent=error.message;}});
-    document.querySelectorAll('[data-kind]').forEach(button=>button.onclick=()=>{capture();const nextKind=button.dataset.kind;if(existing?.kind==='group'&&draft.children.length&&nextKind!=='group'){document.querySelector('#form-error').textContent='Спочатку видаліть або перенесіть дії з групи.';return;}if(draft.kind!==nextKind){draft.kind=nextKind;draft.target=nextKind==='system'?'explorer':'';draft.icon='';if(!nameTyped)draft.name='';pickerConfig.picked?.clear();}draw();});
+    document.querySelectorAll('[data-kind]').forEach(button=>button.onclick=()=>{capture();const nextKind=button.dataset.kind;if(existing?.kind==='group'&&draft.children.length&&nextKind!=='group'){document.querySelector('#form-error').textContent='Спочатку видаліть або перенесіть дії з групи.';return;}if(draft.kind!==nextKind){draft.kind=nextKind;draft.target=nextKind==='system'?'explorer':'';draft.icon='';if(!nameTyped)draft.name='';pickerConfig.picked?.clear();pickerConfig.moveIds?.clear();}draw();});
     document.querySelectorAll('[data-system]').forEach(button=>button.onclick=()=>{
       draft.target=button.dataset.system;
       document.querySelectorAll('[data-system]').forEach(other=>{const active=other===button;other.classList.toggle('active',active);other.setAttribute('aria-pressed',String(active));});
@@ -222,7 +224,17 @@ function actionDialog(id){
   async function submit(){
     capture();if(!existing&&['app','folder','script'].includes(draft.kind)&&pickerConfig.picked?.size){await addPicked();return;}
     if(!draft.name&&draft.target&&draft.kind==='folder')draft.name=folderName(draft.target);
-    if(!draft.name&&draft.target&&draft.kind==='script')draft.name=scriptName(draft.target);if(draft.kind==='app'&&!draft.target){document.querySelector('#form-error').textContent='Оберіть застосунок зі списку, файл або вкажіть посилання.';document.querySelector('#app-search,#action-target')?.focus();return;}if(!draft.name){document.querySelector('#form-error').textContent='Вкажіть назву дії.';document.querySelector('#action-name').focus();return;}const next=structuredClone(state),old=state;state=next;if(existing){const found=locate(existing.id);found.items[found.index]=draft;}else currentGroup().items.push(draft);state=old;if(await save(next,existing?'Дію збережено':'Дію додано')){selectedId=draft.id;closeModal();
+    if(!draft.name&&draft.target&&draft.kind==='script')draft.name=scriptName(draft.target);
+    if(!draft.name&&draft.kind==='group')draft.name='Нова група';if(draft.kind==='app'&&!draft.target){document.querySelector('#form-error').textContent='Оберіть застосунок зі списку, файл або вкажіть посилання.';document.querySelector('#app-search,#action-target')?.focus();return;}if(!draft.name){document.querySelector('#form-error').textContent='Вкажіть назву дії.';document.querySelector('#action-name').focus();return;}const next=structuredClone(state),old=state;state=next;const moving=!existing&&draft.kind==='group'?pickerConfig.moveIds:null;
+    if(existing){const found=locate(existing.id);found.items[found.index]=draft;}
+    else if(moving?.size){
+      // Ticked actions move into the new group, which takes the place of the first of them.
+      const level=currentGroup().items,at=level.findIndex(item=>moving.has(item.id));
+      draft.children=level.filter(item=>moving.has(item.id));
+      const rest=level.filter(item=>!moving.has(item.id));rest.splice(at,0,draft);level.splice(0,level.length,...rest);
+    }
+    else currentGroup().items.push(draft);
+    state=old;if(await save(next,existing?'Дію збережено':draft.kind==='group'?(moving?.size?`Групу створено, перенесено ${moving.size} ${actionsWord(moving.size)}`:'Групу створено'):'Дію додано')){selectedId=draft.id;closeModal();
       // A new group opens right away so its actions can be added without finding it in the list.
       if(!existing&&draft.kind==='group'){await openEditorGroup(draft.id);root.querySelector('.panel-head [data-command="add-action"]')?.focus();}else render();}
   }draw();

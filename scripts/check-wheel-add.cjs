@@ -82,6 +82,22 @@ const os=require('node:os');
       assert.equal(script.kind,'script');assert.equal(script.name,'Render scene');assert.equal(script.target,path.join(scriptsDir,'Render scene.ps1'));
       console.log('PASS: script tiles list runnable scripts with their type, filter, and add one named after its file');
     }finally{await fs.rm(scriptsDir,{recursive:true,force:true});}
+
+    // Group tab: a suggested name picks a fitting icon, and ticked actions move into the new group in their place.
+    const level=(await state()).menus[0].items,first=level.findIndex(item=>item.name==='Документи');
+    await page.locator('.panel-head [data-command="add-action"]').click();await form.locator('[data-kind="group"]').click();
+    await form.locator('[data-group-name="Робота"]').click();
+    assert.equal(await form.locator('#action-name').inputValue(),'Робота');
+    assert.equal(await form.locator('[data-group-icon="briefcase"]').getAttribute('aria-checked'),'true');
+    const moved=[level[first].id,level.find(item=>item.name==='Вебпошук').id];
+    for(const id of moved)await form.locator(`.group-move[data-move-id="${id}"]`).click();
+    await form.getByRole('button',{name:'Створити групу (2)',exact:true}).click();await page.waitForSelector('#modal-root:empty',{state:'attached'});
+    const after=(await state()).menus[0].items,group=after[first];
+    assert.equal(group.kind,'group');assert.equal(group.name,'Робота');assert.equal(group.icon,'briefcase');
+    assert.deepEqual(group.children.map(item=>item.name).sort(),['Вебпошук','Документи']);
+    assert.equal(after.length,level.length-1);assert.equal(after.some(item=>moved.includes(item.id)),false);
+    await page.locator('[data-command="group-back"]').waitFor();
+    console.log('PASS: group gets a suggested name and icon, takes the ticked actions and opens');
     assert.deepEqual(errors,[]);
     console.log('ORBIT_WHEEL_ADD_OK');
   }finally{await app.close();}

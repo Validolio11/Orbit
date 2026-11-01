@@ -72,6 +72,10 @@ const paths = {
   home:'<path d="M3 11 12 4l9 7v9H3z"/><path d="M10 20v-6h4v6"/>',
   cloud:'<path d="M7 18h10a4 4 0 0 0 .5-8A6 6 0 0 0 6 9a4.5 4.5 0 0 0 1 9z"/>',
   drive:'<rect x="3" y="13" width="18" height="7" rx="2"/><path d="M5 13 7.5 5h9L19 13M17 16.5h.01"/>',
+  briefcase:'<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M3 12h18"/>',
+  palette:'<path d="M12 3a9 9 0 1 0 0 18c1.1 0 2-.9 2-2 0-.5-.2-1-.5-1.4-.3-.4-.5-.8-.5-1.3 0-1.1.9-2 2-2h2.3A4.7 4.7 0 0 0 21 9.6C21 5.9 17 3 12 3z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7" r="1"/><circle cx="15" cy="7.5" r="1"/>',
+  gamepad:'<path d="M7 8h10a4 4 0 0 1 4 4l.6 4.2a2 2 0 0 1-3.6 1.4L16 15H8l-2 2.6a2 2 0 0 1-3.6-1.4L3 12a4 4 0 0 1 4-4z"/><path d="M8 11v2m-1-1h2m6.5-.5h.01m2 1.5h.01"/>',
+  star:'<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3 6.4 20.2l1.1-6.2L3 9.6l6.2-.9z"/>',
 };
 export const systemIcons={explorer:'folder','task-manager':'tasks',screenshot:'screenshot',mute:'volumeMute','volume-up':'volumeUp','volume-down':'volumeDown',desktop:'desktop',settings:'settings',lock:'lock','media-play':'playPause',
   'control-panel':'sliders','recycle-bin':'trash',search:'search',run:'run','task-view':'windows',clipboard:'clipboard',emoji:'emoji',dictation:'mic',notifications:'bell',

@@ -38,7 +38,7 @@ const fs = require('node:fs/promises');
       else assert.equal(await dialog().locator('#action-name').count(),0,'Windows commands take the tile name');
       if(kind==='system')await dialog().locator(`[data-system="${target}"]`).click();
       else if(kind!=='group')await dialog().locator('#action-target').fill(target);
-      await modalButton('Додати дію').click();await waitSave();
+      await modalButton(kind==='group'?'Створити групу':'Додати дію').click();await waitSave();
       if(kind==='group'){
         // A new group opens at once with its Add button focused.
         await page.locator('[data-command="group-back"]').waitFor();
