@@ -32,6 +32,8 @@ body.overlay{background:transparent!important}.overlay #app{width:600px;height:6
 .action-row:is(.drop-target,.drop-rejected) .action-desc{display:none}
 .action-row:is(.drop-target,.drop-rejected) .action-drop-message{display:block}
 .action-row.drop-rejected .action-drop-message{color:var(--muted)}
+.action-row .action-tools .move-root{width:auto;gap:5px;padding:0 6px;font-size:10px;white-space:nowrap}
+@media(max-width:1200px){.move-root-label{display:none}.action-row .action-tools .move-root{width:25px;padding:0}}
 .overlay #app{width:100vw;height:100vh}
 .wheel-size-control{flex:0 0 240px;min-width:0}
 .wheel-size-slider{display:flex;align-items:center;gap:12px;min-height:28px}

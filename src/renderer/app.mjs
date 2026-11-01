@@ -3,7 +3,7 @@ import {escapeHTML as e,renderWheel,sectorAt} from './wheel.mjs';
 import {appPickerFields,mountAppPicker} from './app-picker.mjs';
 import {updatesSettings,refreshUpdates} from './updates.mjs';
 import {bindActionDrag} from './action-drag.mjs';
-import {moveActionToGroup} from './action-move.mjs';
+import {moveActionToGroup,moveActionToRoot} from './action-move.mjs';
 
 const api=window.orbit;
 const overlay=new URLSearchParams(location.search).has('overlay');
@@ -77,7 +77,7 @@ function menusPage(){
 }
 function actionDescription(item){if(item.kind==='group')return `${item.children.length} ${item.children.length===1?'дія':'дій'} у вкладеному меню`;if(item.kind==='system')return systemNames[item.target]||'Системна команда';return item.target||'Виберіть шлях до застосунку';}
 function actionRow(item,index,library=false,context=''){
-  return `<div class="action-row ${selectedId===item.id?'selected':''}" data-row-id="${e(item.id)}" ${!library?`draggable="true" title="Перетягніть у групу" ${item.kind==='group'?`data-drop-group="${e(item.id)}"`:''}`:''} tabindex="0" role="button" aria-label="${item.kind==='group'?'Відкрити':'Редагувати'} ${e(item.name)}">${!library?`<span class="action-number">${String(index+1).padStart(2,'0')}</span>`:''}<span class="action-icon">${itemIcon(item,19)}</span><div class="action-copy"><div class="action-name">${e(item.name)}</div><div class="action-desc" title="${e(actionDescription(item))}">${e(context||actionDescription(item))}</div>${!library&&item.kind==='group'?'<div class="action-drop-message" aria-live="polite"></div>':''}</div>${library?`<span class="type-badge">${kinds[item.kind]}</span>`:''}<div class="action-tools">${!library?`<button class="icon-btn reorder" data-move-id="${e(item.id)}" data-direction="-1" aria-label="Перемістити ${e(item.name)} вище" ${index===0?'disabled':''}>${icon('arrowUp',12)}</button>`:''}${item.kind==='group'?`<button class="icon-btn" data-open-group="${e(item.id)}" aria-label="Відкрити групу ${e(item.name)}">${icon('chevron',15)}</button><button class="icon-btn" data-edit-id="${e(item.id)}" aria-label="Редагувати ${e(item.name)}" title="Редагувати групу">${icon('edit',13)}</button><button class="icon-btn danger" data-delete-group="${e(item.id)}" aria-label="Видалити групу ${e(item.name)}" title="Видалити групу">${icon('trash',13)}</button>`:`<button class="icon-btn" data-edit-id="${e(item.id)}" aria-label="Редагувати ${e(item.name)}">${icon('edit',13)}</button><button class="icon-btn danger" data-delete-action="${e(item.id)}" aria-label="Видалити дію ${e(item.name)}" title="Видалити дію">${icon('trash',13)}</button>`}</div></div>`;
+  return `<div class="action-row ${selectedId===item.id?'selected':''}" data-row-id="${e(item.id)}" ${!library?`draggable="true" title="Перетягніть у групу" ${item.kind==='group'?`data-drop-group="${e(item.id)}"`:''}`:''} tabindex="0" role="button" aria-label="${item.kind==='group'?'Відкрити':'Редагувати'} ${e(item.name)}">${!library?`<span class="action-number">${String(index+1).padStart(2,'0')}</span>`:''}<span class="action-icon">${itemIcon(item,19)}</span><div class="action-copy"><div class="action-name">${e(item.name)}</div><div class="action-desc" title="${e(actionDescription(item))}">${e(context||actionDescription(item))}</div>${!library&&item.kind==='group'?'<div class="action-drop-message" aria-live="polite"></div>':''}</div>${library?`<span class="type-badge">${kinds[item.kind]}</span>`:''}<div class="action-tools">${!library&&groupPath.length?`<button class="icon-btn move-root" data-move-root="${e(item.id)}" aria-label="Перемістити ${e(item.name)} в головне меню" title="Перемістити в головне меню">${icon('moveRoot',13)}<span class="move-root-label">На головне</span></button>`:''}${!library?`<button class="icon-btn reorder" data-move-id="${e(item.id)}" data-direction="-1" aria-label="Перемістити ${e(item.name)} вище" ${index===0?'disabled':''}>${icon('arrowUp',12)}</button>`:''}${item.kind==='group'?`<button class="icon-btn" data-open-group="${e(item.id)}" aria-label="Відкрити групу ${e(item.name)}">${icon('chevron',15)}</button><button class="icon-btn" data-edit-id="${e(item.id)}" aria-label="Редагувати ${e(item.name)}" title="Редагувати групу">${icon('edit',13)}</button><button class="icon-btn danger" data-delete-group="${e(item.id)}" aria-label="Видалити групу ${e(item.name)}" title="Видалити групу">${icon('trash',13)}</button>`:`<button class="icon-btn" data-edit-id="${e(item.id)}" aria-label="Редагувати ${e(item.name)}">${icon('edit',13)}</button><button class="icon-btn danger" data-delete-action="${e(item.id)}" aria-label="Видалити дію ${e(item.name)}" title="Видалити дію">${icon('trash',13)}</button>`}</div></div>`;
 }
 function libraryPage(){
   const entries=flatten().filter(({item,path,menu})=>(item.name+' '+kinds[item.kind]+' '+menu.name+' '+path.join(' ')).toLowerCase().includes(search.toLowerCase()));
@@ -158,6 +158,15 @@ root.addEventListener('click',async event=>{
   if(button?.hasAttribute('data-wheel-back')&&!overlay){groupPath.pop();render();return;}
   if(button?.dataset.openGroup){await openEditorGroup(button.dataset.openGroup);return;}
   if(button?.dataset.editId){selectedId=button.dataset.editId;actionDialog(selectedId);return;}
+  if(button?.dataset.moveRoot){
+    try{
+      const id=button.dataset.moveRoot,name=locate(id)?.item.name,next=moveActionToRoot(state,id);
+      if(await save(next,`«${name}» переміщено в головне меню`)){
+        root.querySelector('.action-list [data-row-id], [data-command="group-back"]')?.focus({preventScroll:true});
+      }
+    }catch(error){toast(error.message,true);}
+    return;
+  }
   if(button?.dataset.deleteGroup){deleteDialog('action',button.dataset.deleteGroup);return;}
   if(button?.dataset.deleteAction){deleteDialog('action',button.dataset.deleteAction);return;}
   if(button?.dataset.moveId){const next=structuredClone(state),old=state;state=next;const found=locate(button.dataset.moveId),newIndex=found.index+Number(button.dataset.direction);if(newIndex>=0&&newIndex<found.items.length)[found.items[found.index],found.items[newIndex]]=[found.items[newIndex],found.items[found.index]];state=old;await save(next);return;}

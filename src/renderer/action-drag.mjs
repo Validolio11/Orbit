@@ -14,6 +14,7 @@ export function bindActionDrag(root,{getState,onMove,onError}){
     if(sourceId)blockedUntil=performance.now()+300;
     sourceId=null;highlight(null);root.querySelectorAll('.action-dragging').forEach(row=>row.classList.remove('action-dragging'));
   }
+  root.addEventListener('pointerdown',()=>{if(!sourceId)blockedUntil=0;});
   root.addEventListener('dragstart',event=>{
     const row=event.target.closest('.action-list [data-row-id][draggable="true"]');
     if(!row)return;

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
@@ -23,6 +24,12 @@ internal static class MouseHook
     [StructLayout(LayoutKind.Explicit)] private struct INPUTUNION { [FieldOffset(0)] public MOUSEINPUT mouse; [FieldOffset(0)] public KEYBDINPUT keyboard; }
     [StructLayout(LayoutKind.Sequential)] private struct MOUSEINPUT { public int dx, dy; public uint mouseData, flags, time; public UIntPtr extra; }
     [StructLayout(LayoutKind.Sequential)] private struct KEYBDINPUT { public ushort key, scan; public uint flags, time; public UIntPtr extra; }
+    [StructLayout(LayoutKind.Sequential)] private struct SIZE { public int width, height; }
+    [StructLayout(LayoutKind.Sequential)] private struct BITMAP { public int type, width, height, widthBytes; public ushort planes, bitsPixel; public IntPtr bits; }
+    [StructLayout(LayoutKind.Sequential)] private struct BITMAPINFOHEADER { public uint size; public int width, height; public ushort planes, bitCount; public uint compression, sizeImage; public int xPixelsPerMeter, yPixelsPerMeter; public uint colorsUsed, colorsImportant; }
+    [StructLayout(LayoutKind.Sequential)] private struct BITMAPINFO { public BITMAPINFOHEADER header; public uint color; }
+    [ComImport, Guid("bcc18b79-ba16-442f-80c4-8a59c30c463b"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IShellItemImageFactory { [PreserveSig] int GetImage(SIZE size, uint flags, out IntPtr bitmap); }
     private delegate IntPtr HookProc(int code, IntPtr message, IntPtr data);
     [DllImport("user32.dll", SetLastError = true)] private static extern IntPtr SetWindowsHookEx(int id, HookProc proc, IntPtr module, uint thread);
     [DllImport("user32.dll")] private static extern bool UnhookWindowsHookEx(IntPtr hook);
@@ -35,11 +42,19 @@ internal static class MouseHook
     [DllImport("user32.dll")] private static extern bool SetProcessDpiAwarenessContext(IntPtr value);
     [DllImport("kernel32.dll")] private static extern IntPtr GetModuleHandle(string name);
     [DllImport("kernel32.dll")] private static extern uint GetCurrentThreadId();
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode, PreserveSig = true)] private static extern int SHCreateItemFromParsingName(string path, IntPtr binding, ref Guid id, out IShellItemImageFactory item);
+    [DllImport("gdi32.dll")] private static extern int GetObject(IntPtr item, int size, out BITMAP bitmap);
+    [DllImport("gdi32.dll")] private static extern int GetDIBits(IntPtr dc, IntPtr bitmap, uint start, uint lines, byte[] pixels, ref BITMAPINFO info, uint usage);
+    [DllImport("gdi32.dll")] private static extern bool DeleteObject(IntPtr item);
+    [DllImport("user32.dll")] private static extern IntPtr GetDC(IntPtr window);
+    [DllImport("user32.dll")] private static extern int ReleaseDC(IntPtr window, IntPtr dc);
 
+    [STAThread]
     private static int Main(string[] args)
     {
         Console.OutputEncoding = new UTF8Encoding(false);
         if (Array.IndexOf(args, "--self-test") >= 0) return RunSelfTest();
+        foreach (string arg in args) if (arg.StartsWith("--icon=")) return ReadShellIcon(arg.Substring(7));
         foreach (string arg in args) if (arg.StartsWith("--action=")) return DoAction(arg.Substring(9));
         int parentId = 0;
         foreach (string arg in args)
@@ -151,6 +166,38 @@ internal static class MouseHook
         catch { RequestStop(); }
     }
     private static void RequestStop() { PostThreadMessage(MainThread, WM_QUIT, UIntPtr.Zero, IntPtr.Zero); }
+
+    private static int ReadShellIcon(string file)
+    {
+        // This mode never installs an input hook or starts the selected application.
+        // ICONONLY | BIGGERSIZEOK requests the actual Shell icon without SCALEUP.
+        if (string.IsNullOrWhiteSpace(file) || file.Length > 4096 || file.IndexOf('\0') >= 0 || file.Length < 3 || file[1] != ':' || (file[2] != '\\' && file[2] != '/') || !File.Exists(file)) return 2;
+        string extension = Path.GetExtension(file);
+        if (!extension.Equals(".exe", StringComparison.OrdinalIgnoreCase) && !extension.Equals(".lnk", StringComparison.OrdinalIgnoreCase)) return 2;
+        IShellItemImageFactory factory = null;
+        IntPtr bitmap = IntPtr.Zero, dc = IntPtr.Zero;
+        try
+        {
+            Guid id = new Guid("bcc18b79-ba16-442f-80c4-8a59c30c463b");
+            if (SHCreateItemFromParsingName(file, IntPtr.Zero, ref id, out factory) < 0 || factory == null) return 6;
+            if (factory.GetImage(new SIZE { width = 256, height = 256 }, 0x00000005, out bitmap) < 0 || bitmap == IntPtr.Zero) return 6;
+            BITMAP dimensions;
+            if (GetObject(bitmap, Marshal.SizeOf(typeof(BITMAP)), out dimensions) == 0 || dimensions.width < 1 || dimensions.width > 512 || dimensions.height < 1 || dimensions.height > 512) return 6;
+            var pixels = new byte[dimensions.width * dimensions.height * 4];
+            var info = new BITMAPINFO { header = new BITMAPINFOHEADER { size = (uint)Marshal.SizeOf(typeof(BITMAPINFOHEADER)), width = dimensions.width, height = -dimensions.height, planes = 1, bitCount = 32, compression = 0 } };
+            dc = GetDC(IntPtr.Zero);
+            if (GetDIBits(dc, bitmap, 0, (uint)dimensions.height, pixels, ref info, 0) != dimensions.height) return 6;
+            Console.WriteLine("{\"width\":" + dimensions.width + ",\"height\":" + dimensions.height + ",\"pixels\":\"" + Convert.ToBase64String(pixels) + "\"}");
+            return 0;
+        }
+        catch { return 6; }
+        finally
+        {
+            if (dc != IntPtr.Zero) ReleaseDC(IntPtr.Zero, dc);
+            if (bitmap != IntPtr.Zero) DeleteObject(bitmap);
+            if (factory != null) Marshal.ReleaseComObject(factory);
+        }
+    }
 
     private static int DoAction(string action)
     {

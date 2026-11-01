@@ -3,7 +3,7 @@ function findAction(state,id){
       const walk=(items,depth=0,parent=null)=>{
         for(let index=0;index<items.length;index++){
           const item=items[index];
-          if(item.id===id)return {item,items,index,depth,parent};
+          if(item.id===id)return {item,items,index,depth,parent,menu};
           if(item.kind==='group'){
             const found=walk(item.children,depth+1,item);
             if(found)return found;
@@ -42,5 +42,18 @@ export function moveActionToGroup(state,sourceId,targetGroupId){
   if(source.parent===target.item)return next;
   source.items.splice(source.index,1);
   target.item.children.push(source.item);
+  return next;
+}
+
+/** Move an action out of any nested group to its own menu's root. */
+export function moveActionToRoot(state,sourceId){
+  const original=findAction(state,sourceId);
+  if(!original)throw new Error('Дію для переміщення не знайдено.');
+  if(original.parent&&original.menu.items.length>=12)throw new Error('У головному меню вже 12 дій. Спочатку видаліть зайву дію або перемістіть її в групу.');
+  const next=structuredClone(state);
+  const source=findAction(next,sourceId);
+  if(!source.parent)return next;
+  source.items.splice(source.index,1);
+  source.menu.items.push(source.item);
   return next;
 }

@@ -18,6 +18,44 @@ const { createAppCatalog, validatePackagedTarget, isLocalAppPath } = require('./
 const { createUpdater } = require('./updater.cjs');
 const UPDATE_REPOSITORY = 'Validolio11/Orbit';
 const UPDATE_REPOSITORY_URL = 'https://github.com/' + UPDATE_REPOSITORY;
+let iconWorkers = 0;
+const waitingIcons = [];
+
+async function readHighResolutionIcon(target) {
+  // Shell extraction runs in short-lived native processes rather than blocking Electron.
+  if (iconWorkers < 2) iconWorkers++;
+  else await new Promise(resolve => waitingIcons.push(resolve));
+  try {
+    return await new Promise(resolve => {
+      const child = spawn(NATIVE, [`--icon=${target}`], { windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
+      let chunks = [], bytes = 0, settled = false;
+      const finish = image => { if (settled) return; settled = true; clearTimeout(timer); resolve(image); };
+      const timer = setTimeout(() => { child.kill(); finish(null); }, 4000);
+      child.stdout.on('data', chunk => {
+        bytes += chunk.length;
+        if (bytes > 1500 * 1024) { child.kill(); chunks = []; finish(null); }
+        else chunks.push(chunk);
+      });
+      child.once('error', () => finish(null));
+      child.once('close', code => {
+        if (settled || code !== 0) { finish(null); return; }
+        try {
+          const value = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+          if (!Number.isInteger(value.width) || !Number.isInteger(value.height) || value.width < 1 || value.width > 512 || value.height < 1 || value.height > 512 || typeof value.pixels !== 'string') { finish(null); return; }
+          const bitmap = Buffer.from(value.pixels, 'base64');
+          if (bitmap.length !== value.width * value.height * 4) { finish(null); return; }
+          const image = nativeImage.createFromBitmap(bitmap, { width: value.width, height: value.height, scaleFactor: 1 });
+          finish(image.isEmpty() ? null : image);
+        } catch { finish(null); }
+      });
+    });
+  } finally {
+    const next = waitingIcons.shift();
+    if (next) next();
+    else iconWorkers--;
+  }
+}
+
 const appCatalog = createAppCatalog({ cachePath: () => path.join(app.getPath('userData'), 'app-catalog.json'), loadIcon: async target => {
   if (!isLocalAppPath(target)) return null;
   if (!(await fsp.stat(target).catch(() => null))?.isFile()) return null;
@@ -25,8 +63,19 @@ const appCatalog = createAppCatalog({ cachePath: () => path.join(app.getPath('us
   if (/\.lnk$/i.test(target)) {
     try { const shortcut = shell.readShortcutLink(target); if (isLocalAppPath(shortcut.target) && (await fsp.stat(shortcut.target).catch(() => null))?.isFile()) iconTarget = shortcut.target; } catch { }
   }
-  const image = await app.getFileIcon(iconTarget, { size: 'small' });
-  return image.isEmpty() ? null : image.toDataURL();
+  const image = await app.getFileIcon(iconTarget, { size: 'large' });
+  if (image.isEmpty()) return null;
+  const representation = image.getScaleFactors().reduce((best, factor) => {
+    const buffer = image.toPNG({ scaleFactor: factor });
+    return !best || buffer.readUInt32BE(16) > best.readUInt32BE(16) ? buffer : best;
+  }, null) || image.toPNG();
+  // Electron's Windows icon API can stop at 48 px. Ask the Shell for its original
+  // 256 px frame when necessary; never enlarge a smaller bitmap to invent detail.
+  if (process.platform === 'win32' && representation.readUInt32BE(16) < 128) {
+    const shellIcon = await readHighResolutionIcon(iconTarget);
+    if (shellIcon && shellIcon.getSize().width > representation.readUInt32BE(16)) return shellIcon.toDataURL();
+  }
+  return 'data:image/png;base64,' + representation.toString('base64');
 } });
 let mainWindow, overlayWindow, tray, state, statePath, quitting = false, hookProcess = null;
 let overlayReady, wheelVisible = false, wheelSession = 0, pendingMouseOpen = false, pendingMouseRelease = null, configQueue = Promise.resolve();

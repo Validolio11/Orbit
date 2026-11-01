@@ -40,6 +40,7 @@ const paths = {
   refresh:'<path d="M20 7v5h-5M4 17v-5h5"/><path d="M6 7a7 7 0 0 1 12-2l2 3M4 16l2 3a7 7 0 0 0 12-2"/>',
   drag:'<circle cx="9" cy="5" r=".8"/><circle cx="15" cy="5" r=".8"/><circle cx="9" cy="12" r=".8"/><circle cx="15" cy="12" r=".8"/><circle cx="9" cy="19" r=".8"/><circle cx="15" cy="19" r=".8"/>',
   arrowUp:'<path d="m6 10 6-6 6 6m-6-6v16"/>',
+  moveRoot:'<path d="M14 4h6v6m0-6-9 9M10 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-5"/>',
   arrowDown:'<path d="m6 14 6 6 6-6m-6 6V4"/>',
   import:'<path d="M3 15v6h18v-6M12 3v12m-5-5 5 5 5-5"/>',
   export:'<path d="M3 15v6h18v-6M12 15V3m-5 5 5-5 5 5"/>',

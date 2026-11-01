@@ -75,3 +75,63 @@ test('dragover validation allocates no state clone and agrees with drop validati
   assert.equal(actionMoveError(original,'nested','adobe'),null);
   assert.deepEqual(validateState(moveActionToGroup(original,'app','adobe')).menus[0].items[0].children.map(item=>item.id),['nested','app']);
 });
+
+test('a nested action moves to its containing menu root and preserves metadata and sibling order',async()=>{
+  const {moveActionToRoot}=await import('../src/renderer/action-move.mjs');
+  const original=configuration([action('first'),group('adobe',[action('before'),action('illustrator'),action('after')]),action('last')]);
+  const snapshot=structuredClone(original),moved=moveActionToRoot(original,'illustrator');
+  assert.deepEqual(original,snapshot);
+  assert.deepEqual(moved.menus[0].items.map(item=>item.id),['first','adobe','last','illustrator']);
+  assert.deepEqual(moved.menus[0].items[1].children.map(item=>item.id),['before','after']);
+  assert.deepEqual(moved.menus[0].items.at(-1),snapshot.menus[0].items[1].children[1]);
+  assert.deepEqual(validateState(moved),moved);
+});
+
+test('deeply nested folders and groups move to root without losing paths or descendants',async()=>{
+  const {moveActionToRoot}=await import('../src/renderer/action-move.mjs');
+  const folder={...action('project-folder','folder'),target:'D:\\Motion projects\\Scene 2026'};
+  const branch=group('tools',[folder,group('extras',[action('editor')])]);
+  const original=configuration([group('outer',[group('inner',[branch])]),action('root-action')]);
+  const snapshot=structuredClone(original),movedGroup=moveActionToRoot(original,'tools');
+  assert.deepEqual(movedGroup.menus[0].items.at(-1),branch);
+  assert.equal(movedGroup.menus[0].items[0].children[0].children.length,0);
+  const movedFolder=moveActionToRoot(original,'project-folder');
+  assert.deepEqual(movedFolder.menus[0].items.at(-1),folder);
+  assert.deepEqual(validateState(movedGroup),movedGroup);
+  assert.deepEqual(validateState(movedFolder),movedFolder);
+  assert.deepEqual(original,snapshot);
+});
+
+test('root moves stay within the source menu even when another menu is active',async()=>{
+  const {moveActionToRoot}=await import('../src/renderer/action-move.mjs');
+  const original=configuration([group('main-group',[action('main-child')])]);
+  original.menus.push({id:'second',name:'Second',icon:'orbit',items:[group('second-group',[action('second-child')])]});
+  validateState(original);
+  const snapshot=structuredClone(original),moved=moveActionToRoot(original,'second-child');
+  assert.equal(moved.activeMenuId,'main');
+  assert.deepEqual(moved.menus[0],snapshot.menus[0]);
+  assert.deepEqual(moved.menus[1].items.map(item=>item.id),['second-group','second-child']);
+  assert.equal(moved.menus[1].items[0].children.length,0);
+  assert.deepEqual(validateState(moved),moved);
+  assert.deepEqual(original,snapshot);
+});
+
+test('already-root moves are cloned no-ops even when the root is full',async()=>{
+  const {moveActionToRoot}=await import('../src/renderer/action-move.mjs');
+  const original=configuration(Array.from({length:12},(_,index)=>action(`root-${index}`)));
+  const moved=moveActionToRoot(original,'root-5');
+  assert.notEqual(moved,original);
+  assert.deepEqual(moved,original);
+  assert.deepEqual(validateState(moved),moved);
+});
+
+test('missing actions and full roots reject before detaching the source',async()=>{
+  const {moveActionToRoot}=await import('../src/renderer/action-move.mjs');
+  const original=configuration([group('adobe',[action('illustrator')]),...Array.from({length:11},(_,index)=>action(`root-${index}`))]);
+  const snapshot=structuredClone(original);
+  assert.throws(()=>moveActionToRoot(original,'missing'),/Дію для переміщення не знайдено/);
+  assert.deepEqual(original,snapshot);
+  assert.throws(()=>moveActionToRoot(original,'illustrator'),/У головному меню вже 12 дій/);
+  assert.deepEqual(original,snapshot);
+  assert.deepEqual(validateState(original),snapshot);
+});
