@@ -193,8 +193,30 @@ function createUpdater(options) {
     return destination;
   }
 
+  // Removes leftovers of earlier updates: each finished or abandoned transaction keeps a full
+  // downloaded archive, and failed preparations can leave an unpacked stage beside the app.
+  // A committed install without a result may still need recovery, so it is kept.
+  async function cleanup() {
+    if (busy || committed || disposed) return;
+    const parent = path.dirname(paths.install);
+    const exists = file => fsp.access(file).then(() => true, () => false);
+    const kept = new Set(prepared ? [prepared.id] : []);
+    for (const entry of await fsp.readdir(paths.updates, { withFileTypes: true }).catch(() => [])) {
+      if (!entry.isDirectory() || !/^[0-9a-f]{32}$/.test(entry.name) || kept.has(entry.name)) continue;
+      const work = path.join(paths.updates, entry.name);
+      if (await exists(path.join(work, 'commit.json')) && !await exists(path.join(work, 'result.json'))) { kept.add(entry.name); continue; }
+      await removeOwnedDirectory(work, paths.updates, entry.name).catch(() => {});
+    }
+    for (const entry of await fsp.readdir(parent, { withFileTypes: true }).catch(() => [])) {
+      const match = /^\.Orbit-update-stage-([0-9a-f]{32})$/.exec(entry.name);
+      if (!entry.isDirectory() || !match || kept.has(match[1])) continue;
+      await removeOwnedDirectory(path.join(parent, entry.name), parent, entry.name).catch(() => {});
+    }
+  }
+
   return {
     getStatus: snapshot,
+    cleanup,
     async check() {
       if (committed) return snapshot();
       return operation(async signal => {

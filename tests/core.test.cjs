@@ -75,6 +75,12 @@ test('group open mode defaults to hover and accepts click', () => {
   assert.throws(() => validateState({ ...configuration(), groupOpenMode: 'release' }), /group open mode/);
 });
 
+test('start with Windows defaults on and keeps an explicit opt-out', () => {
+  assert.equal(validateState(configuration()).launchAtLogin, true);
+  assert.equal(validateState({ ...configuration(), launchAtLogin: false }).launchAtLogin, false);
+  assert.throws(() => validateState({ ...configuration(), launchAtLogin: 'yes' }), /start-with-Windows/);
+});
+
 test('outside-click cancellation migrates old preferences and retains explicit opt-out', () => {
   assert.equal(validateState(configuration()).closeOnOutsideClick, true);
   assert.equal(validateState({ ...configuration(), closeOnOutsideClick: false }).closeOnOutsideClick, false);

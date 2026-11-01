@@ -3,11 +3,13 @@ const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
-const { spawn } = require('node:child_process');
+const { spawn, execFile } = require('node:child_process');
 
 const SMOKE = process.argv.includes('--smoke-test');
 const E2E = process.argv.includes('--e2e');
 const ISOLATED = SMOKE || E2E;
+// Windows starts Orbit with this flag at sign-in; it then waits in the tray without opening its window.
+const HIDDEN = process.argv.includes('--hidden');
 const NATIVE = app.isPackaged && __dirname.includes('app.asar')
   ? path.join(process.resourcesPath, 'app.asar.unpacked', 'native', 'Orbit.Input.exe')
   : path.join(__dirname, '..', 'native', 'Orbit.Input.exe');
@@ -100,7 +102,7 @@ function adobeExecutable(product, executable) {
 
 function defaultState() {
   const action = (id, name, kind, target, icon, children = []) => ({ id, name, kind, target, args: '', icon, children });
-  return { version: 1, theme: 'dark', triggerButton: 4, activationMode: 'hover', groupOpenMode: 'hover', hoverDelay: 350, enabled: true, reducedMotion: false, closeOnOutsideClick: true, wheelSize: 520,
+  return { version: 1, theme: 'dark', triggerButton: 4, activationMode: 'hover', groupOpenMode: 'hover', hoverDelay: 350, enabled: true, reducedMotion: false, closeOnOutsideClick: true, launchAtLogin: true, wheelSize: 520,
     activeMenuId: 'main', menus: [{ id: 'main', name: 'Головне меню', icon: 'orbit', items: [
       action('adobe', 'Adobe', 'group', '', 'adobe', [
         action('illustrator', 'Illustrator', 'app', adobeExecutable('Adobe Illustrator', 'Illustrator.exe'), 'illustrator'),
@@ -130,6 +132,23 @@ function sendAll(channel, value) {
 }
 function updateRuntime(patch) { runtime = { ...runtime, ...patch }; sendAll('orbit:runtime-changed', runtime); }
 
+// Keeps the Apps list version current after in-app updates of an installer-made copy.
+function updateUninstallEntry() {
+  if (!app.isPackaged || ISOLATED) return;
+  const key = 'HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\Orbit';
+  const reg = path.join(process.env.WINDIR || 'C:\Windows', 'System32', 'reg.exe');
+  execFile(reg, ['query', key, '/v', 'InstallLocation'], { windowsHide: true }, (error, stdout) => {
+    const location = /InstallLocation\s+REG_SZ\s+(.+)/.exec(stdout || '')?.[1]?.trim();
+    if (error || !location || path.resolve(location).toLowerCase() !== path.dirname(process.execPath).toLowerCase()) return;
+    execFile(reg, ['add', key, '/v', 'DisplayVersion', '/t', 'REG_SZ', '/d', app.getVersion(), '/f'], { windowsHide: true }, () => {});
+  });
+}
+
+function applyLoginItem() {
+  if (!app.isPackaged || ISOLATED) return;
+  try { app.setLoginItemSettings({ openAtLogin: state.launchAtLogin !== false, path: process.execPath, args: ['--hidden'] }); } catch (error) { console.error(error); }
+}
+
 async function persistState(value) {
   const next = validateState(value);
   await fsp.mkdir(path.dirname(statePath), { recursive: true });
@@ -140,6 +159,7 @@ async function persistState(value) {
   state = next;
   nativeTheme.themeSource = state.theme;
   if (!state.enabled) closeWheel();
+  applyLoginItem();
   sendAll('orbit:state-changed', state);
   if (hookChanged && !ISOLATED) { await stopHook(); startHook(); }
   updateTray();
@@ -176,7 +196,7 @@ function createWindows() {
   overlayWindow.on('close', event => { if (!quitting) { event.preventDefault(); closeWheel(); } });
   overlayReady = overlayWindow.loadFile(PAGE, { query: { overlay: '1' } });
   const mainReady = mainWindow.loadFile(PAGE);
-  mainReady.then(() => { if (!SMOKE && !quitting) mainWindow.show(); }).catch(reportStartupError);
+  mainReady.then(() => { if (!SMOKE && !HIDDEN && !quitting) mainWindow.show(); }).catch(reportStartupError);
   overlayReady.catch(reportStartupError);
   return Promise.all([mainReady, overlayReady]);
 }
@@ -463,6 +483,7 @@ else {
   app.whenReady().then(async () => {
     statePath = path.join(app.getPath('userData'), 'settings.json');
     state = await loadState(); nativeTheme.themeSource = state.theme;
+    applyLoginItem(); updateUninstallEntry();
     updater = createUpdater({
       version: app.getVersion(), repo: UPDATE_REPOSITORY,
       installDir: path.dirname(process.execPath),
@@ -481,5 +502,7 @@ else {
     createTray();
     updateRuntime({ shortcutRegistered: globalShortcut.register('Control+Space', () => wheelVisible ? closeWheel() : showWheel().catch(console.error)) });
     startHook();
+    // Wait until a just-finished update helper has exited before removing its files.
+    if (app.isPackaged) setTimeout(() => updater.cleanup().catch(() => {}), 30000);
   }).catch(async error => { console.error(error); quitting = true; appCatalog.dispose(); await stopHook(); globalShortcut.unregisterAll(); if (tray) tray.destroy(); app.exit(1); });
 }

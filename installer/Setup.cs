@@ -201,6 +201,7 @@ static class Setup
                 {
                     key.SetValue("DisplayName", "Orbit");
                     key.SetValue("Publisher", "Creation Soft");
+                    key.SetValue("DisplayVersion", ReadVersion());
                     key.SetValue("DisplayIcon", Path.Combine(target, "Orbit.exe") + ",0");
                     key.SetValue("InstallLocation", target);
                     key.SetValue("UninstallString", "\"" + UninstallerPath + "\"");

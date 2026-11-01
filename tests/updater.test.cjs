@@ -123,3 +123,19 @@ test('installer arms only after helper readiness and saved state; app shutdown p
   assert.deepEqual(events,['helper','saved','quit']);assert.equal(killed,false);
   assert.ok(installLaunch.args.includes('-Detach'));assert.ok(!installLaunch.options.detached,'PowerShell exits without running when spawned detached');
 });
+
+test('cleanup removes finished and abandoned update files but keeps an interrupted install for recovery',async t=>{
+  const {updater,root,updates}=await fixture(t);
+  const id=n=>String(n).repeat(32);
+  const make=async(dir,files=[])=>{await fs.mkdir(dir,{recursive:true});for(const file of files)await fs.writeFile(path.join(dir,file),'{}');};
+  await make(path.join(updates,id(1)),['Orbit-0.2.0-win32-x64.zip','commit.json','result.json']);
+  await make(path.join(updates,id(2)),['commit.json']);
+  await make(path.join(updates,id(3)),['prepared.json']);
+  await make(path.join(updates,'not-an-update'));
+  for(const n of [1,2,4])await make(path.join(root,`.Orbit-update-stage-${id(n)}`),['Orbit.exe']);
+  await make(path.join(root,`.Orbit-update-backup-${id(1)}`),['Orbit.exe']);
+  await updater.cleanup();
+  assert.deepEqual((await fs.readdir(updates)).sort(),[id(2),'not-an-update'].sort());
+  assert.deepEqual((await fs.readdir(root)).filter(name=>name.startsWith('.Orbit-')).sort(),[`.Orbit-update-backup-${id(1)}`,`.Orbit-update-stage-${id(2)}`].sort());
+  assert.ok((await fs.readdir(root)).includes('app'));
+});

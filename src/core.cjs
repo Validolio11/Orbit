@@ -41,6 +41,7 @@ function validateState(value) {
   if (!Number.isInteger(value.hoverDelay) || value.hoverDelay < 150 || value.hoverDelay > 2000) throw new Error('Hover delay must be between 150 and 2000 ms.');
   if (typeof value.enabled !== 'boolean' || typeof value.reducedMotion !== 'boolean') throw new Error('Invalid preference values.');
   if (value.closeOnOutsideClick !== undefined && typeof value.closeOnOutsideClick !== 'boolean') throw new Error('Invalid outside-click preference.');
+  if (value.launchAtLogin !== undefined && typeof value.launchAtLogin !== 'boolean') throw new Error('Invalid start-with-Windows preference.');
   if (value.wheelSize !== undefined && (!Number.isInteger(value.wheelSize) || value.wheelSize < 312 || value.wheelSize > 780)) throw new Error('Wheel size must be an integer between 312 and 780 DIP.');
   if (!Array.isArray(value.menus) || !value.menus.length || value.menus.length > 20) throw new Error('Create between 1 and 20 menus.');
   const ids = new Set();
@@ -56,7 +57,7 @@ function validateState(value) {
   });
   if (!menus.some(menu => menu.id === value.activeMenuId)) throw new Error('The active menu does not exist.');
   return { version: 1, theme: value.theme, triggerButton: value.triggerButton, activationMode: value.activationMode, groupOpenMode: value.groupOpenMode ?? 'hover',
-    hoverDelay: value.hoverDelay, enabled: value.enabled, reducedMotion: value.reducedMotion, closeOnOutsideClick: value.closeOnOutsideClick ?? true, wheelSize: value.wheelSize ?? 520, menus, activeMenuId: value.activeMenuId };
+    hoverDelay: value.hoverDelay, enabled: value.enabled, reducedMotion: value.reducedMotion, closeOnOutsideClick: value.closeOnOutsideClick ?? true, launchAtLogin: value.launchAtLogin ?? true, wheelSize: value.wheelSize ?? 520, menus, activeMenuId: value.activeMenuId };
 }
 
 function parseArguments(value) {
