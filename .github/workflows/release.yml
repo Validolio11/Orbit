@@ -1,0 +1,46 @@
+name: Release Orbit
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows-release:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - run: npm ci
+      - run: npm test
+      - name: Native lifecycle tests
+        shell: powershell
+        run: ./scripts/test-native.ps1
+      - name: Updater transaction tests
+        shell: powershell
+        run: ./scripts/test-updater.ps1
+      - run: npm run release
+      - run: node scripts/smoke-packaged.cjs
+      - name: Publish release assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $orbitReleaseVersion = node -p "require('./package.json').version"
+          gh release create "v$orbitReleaseVersion" "release/Orbit-$orbitReleaseVersion-win32-x64.zip" "release/SHA256SUMS.txt" --verify-tag --title "Orbit $orbitReleaseVersion" --generate-notes --draft
+          if ($LASTEXITCODE -ne 0) { throw 'Release upload failed.' }
+          gh release edit "v$orbitReleaseVersion" --draft=false --latest

@@ -1,0 +1,86 @@
+// Repeat one tooth at 60-degree intervals instead of accumulating relative segments.
+const gearPoint = (radius, degrees) => {
+  const angle = degrees * Math.PI / 180;
+  return `${(12 + radius * Math.cos(angle)).toFixed(3)},${(12 + radius * Math.sin(angle)).toFixed(3)}`;
+};
+const settingsOutline = Array.from({length:6},(_,index)=>{
+  const angle=-90+index*60;
+  return `${index?'L':'M'}${gearPoint(7.5,angle-22)} L${gearPoint(10,angle-11)} L${gearPoint(10,angle+11)} L${gearPoint(7.5,angle+22)} A7.5 7.5 0 0 1 ${gearPoint(7.5,angle+38)}`;
+}).join(' ')+' Z';
+
+const paths = {
+  orbit:'<ellipse cx="12" cy="12" rx="9" ry="4.5" transform="rotate(-40 12 12)"/><circle cx="12" cy="12" r="3"/><circle cx="18.9" cy="6.2" r="1.3" fill="currentColor" stroke="none"/>',
+  wheel:'<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="M12 3v6m0 6v6M3 12h6m6 0h6M5.6 5.6l4.3 4.3m4.2 4.2 4.3 4.3M5.6 18.4l4.3-4.3m4.2-4.2 4.3-4.3"/>',
+  grid:'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
+  mouse:'<rect x="6" y="2" width="12" height="20" rx="6"/><path d="M6 9h12m-6-7v7M4 8v5"/>',
+  settings:`<path d="${settingsOutline}"/><circle cx="12" cy="12" r="3"/>`,
+  plus:'<path d="M12 5v14M5 12h14"/>',
+  play:'<path d="m9 5 11 7-11 7z"/>',
+  chevron:'<path d="m9 5 7 7-7 7"/>',
+  down:'<path d="m6 9 6 6 6-6"/>',
+  back:'<path d="m14 5-7 7 7 7M7 12h14"/>',
+  folder:'<path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10H3z"/>',
+  app:'<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 8h18M7 5.5h.01m3 0h.01"/>',
+  script:'<path d="m8 6-5 6 5 6m8-12 5 6-5 6m-3-15-2 18"/>',
+  system:'<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8m-4-4v4"/>',
+  group:'<path d="M3 6h7l2 2h9v13H3zM3 3h7l2 2h9"/>',
+  browser:'<circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/>',
+  screenshot:'<path d="M8 3H3v5m13-5h5v5M3 16v5h5m8 0h5v-5"/><rect x="7" y="7" width="10" height="10" rx="1"/>',
+  volume:'<path d="M11 4 6 8H3v8h3l5 4zM15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/>',
+  tasks:'<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 16v-4m5 4V7m5 9v-6"/>',
+  sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.4 1.4m11.2 11.2L19 19M5 19l1.4-1.4M17.6 6.4 19 5"/>',
+  moon:'<path d="M21 13.5A9 9 0 0 1 10.5 3 9 9 0 1 0 21 13.5Z"/>',
+  check:'<path d="m5 12 4 4L19 6"/>',
+  close:'<path d="m6 6 12 12M6 18 18 6"/>',
+  minus:'<path d="M5 12h14"/>',
+  edit:'<path d="m15 5 4 4M4 20l4-1L21 6l-4-4L4 15z"/>',
+  copy:'<rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 4V3H3v13h1"/>',
+  trash:'<path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/>',
+  search:'<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/>',
+  refresh:'<path d="M20 7v5h-5M4 17v-5h5"/><path d="M6 7a7 7 0 0 1 12-2l2 3M4 16l2 3a7 7 0 0 0 12-2"/>',
+  drag:'<circle cx="9" cy="5" r=".8"/><circle cx="15" cy="5" r=".8"/><circle cx="9" cy="12" r=".8"/><circle cx="15" cy="12" r=".8"/><circle cx="9" cy="19" r=".8"/><circle cx="15" cy="19" r=".8"/>',
+  arrowUp:'<path d="m6 10 6-6 6 6m-6-6v16"/>',
+  arrowDown:'<path d="m6 14 6 6 6-6m-6 6V4"/>',
+  import:'<path d="M3 15v6h18v-6M12 3v12m-5-5 5 5 5-5"/>',
+  export:'<path d="M3 15v6h18v-6M12 15V3m-5 5 5-5 5 5"/>',
+  keyboard:'<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 9h.01m4 0h.01m4 0h.01m4 0h.01M6 12h.01m4 0h.01m4 0h.01m4 0h.01M7 16h10"/>',
+  info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10h.01"/>',
+  external:'<path d="M14 3h7v7m0-7L10 14M10 3H3v18h18v-7"/>',
+  pause:'<path d="M8 5v14m8-14v14"/>',
+};
+export function icon(name,size=20){return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name]||paths.app}</svg>`;}
+function fallbackItemIcon(item,size=22){
+  const n = (item.name||'').toLowerCase();
+  const adobe = n.includes('illustrator')?['Ai','ai']:n.includes('after effects')?['Ae','ae']:n.includes('photoshop')?['Ps','ps']:n==='adobe'?['A','adobe']:null;
+  if(adobe)return `<span class="adobe-icon ${adobe[1]}" style="--icon-size:${size}px">${adobe[0]}</span>`;
+  const guessed = item.target==='explorer'?'folder':item.target==='task-manager'?'tasks':item.target==='screenshot'?'screenshot':/mute|volume/.test(item.target)?'volume':item.target==='settings'?'settings':/browser/i.test(item.icon)||/браузер|browser|chrome|edge|вебпошук/.test(n)?'browser':item.kind;
+  const aliases={globe:'browser',files:'folder',activity:'tasks'};
+  return icon(paths[item.icon]?item.icon:aliases[item.icon]||guessed,size);
+}
+
+const appIconCache=new Map(),appIconRequests=new Map();
+const attribute=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+export function rememberAppIcon(target,data){
+  if(typeof target==='string'&&typeof data==='string'&&data.startsWith('data:image/png;base64,')&&data.length<200000)appIconCache.set(target,data);
+}
+export function itemIcon(item,size=22){
+  const fallback=fallbackItemIcon(item,size);
+  if(item.kind!=='app'||!item.target)return fallback;
+  const data=appIconCache.get(item.target);
+  return `<span class="app-icon-slot" data-app-icon-target="${attribute(item.target)}" style="--app-icon-size:${size}px">${data?`<img src="${data}" alt="" draggable="false">`:fallback}</span>`;
+}
+export function hydrateAppIcons(root=document){
+  const targets=new Set([...root.querySelectorAll('[data-app-icon-target]')].map(node=>node.dataset.appIconTarget));
+  const apply=target=>{
+    const data=appIconCache.get(target);if(!data)return;
+    for(const node of document.querySelectorAll('[data-app-icon-target]'))if(node.dataset.appIconTarget===target&&!node.querySelector('img')){
+      const image=document.createElement('img');image.src=data;image.alt='';image.draggable=false;node.replaceChildren(image);
+    }
+  };
+  for(const target of targets){
+    if(appIconCache.has(target)){apply(target);continue;}
+    if(appIconRequests.has(target)||!window.orbit?.getAppIcon)continue;
+    const request=window.orbit.getAppIcon(target).then(data=>{if(data)rememberAppIcon(target,data);else appIconCache.set(target,null);apply(target);}).catch(()=>{appIconCache.set(target,null);}).finally(()=>appIconRequests.delete(target));
+    appIconRequests.set(target,request);
+  }
+}

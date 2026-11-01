@@ -1,0 +1,96 @@
+# Orbit QA inventory
+
+User-visible requirements and implementation checks:
+
+- Geist: inspect dark/light main editor, wheel, dialog; no clipped text, overlaps or decorative color accents.
+- Menu lifecycle: create, rename, duplicate (unique nested IDs), switch, delete; last menu retained.
+- Action lifecycle: add/edit/delete programs, filesystem folders, scripts, Windows actions and groups; browse opens native picker; reorder changes wheel order.
+- Nested groups: open/back in editor and global overlay, edit nested action, keyboard navigation and Escape.
+- Activation: release, hover with configurable delay, click. No action executes merely from opening the overlay; Escape cancels pending timers.
+- Side buttons: native helper install/readiness/shutdown for Mouse4 and Mouse5; actual physical device check remains user hardware validation.
+- Settings: enabled state, both trigger buttons, themes (round trip), reduced motion, atomic JSON persistence, import/export dialogs.
+- Window behavior: custom controls, tray and shortcut, overlay on current display; close cleans native helper on quit.
+- Responsive: launch dimensions and minimum 1050×720; all action controls remain reachable.
+- Off happy path: unknown app path shows actionable error; duplicated identifiers/oversized groups/invalid system commands rejected; pointer transition into group must not execute the child under the stationary cursor.
+
+Method: pure core and radial math tests; native lifecycle script; Electron smoke; interactive Electron QA with isolated --e2e storage and executor disabled; separate native UI inspection and packaged launch.
+
+Evidence and outcomes recorded after verification below.
+
+## Verified 2026-11-01
+
+- `npm test`: 11 tests pass. Covers schema/allowlist/IDs/limits, Windows argument escaping, monitor geometry, radial selection and constant-width gutters. Gutters are 6 viewBox units, with each edge offset by 3 units from the shared radial boundary at both radii.
+- `scripts/test-native.ps1`: native self-test, actual hook install/readiness for button 4 and button 5, stdin shutdown and orphan-parent watchdog pass. This does not substitute for pressing a physical mouse button.
+- `npm run test:ui`: pass. All five action types; menu create/rename/duplicate/delete; nested group add/back; order changes; persistence after reload; search/empty results; button/mode/delay changes; enabled and reduced-motion round trips; light/system/dark; overlay click and keyboard group navigation; Escape; JSON import/export and action deletion. Native picker destinations were substituted with a temporary test path; actual IPC and persistence were exercised.
+- Portable `Orbit.exe --smoke-test`: pass. Main and overlay bridges/rendering plus native helper work from the packaged app. The native executable is unpacked outside app.asar, which is necessary for child-process spawning.
+- Portable normal launch: `hookReady:true`, `hookError:null`, `shortcutRegistered:true`; userData is `%APPDATA%/Orbit`. A temporary action pointing at a nonexistent executable produced a visible main-window error and was then removed.
+- Visual: dark and light main editor, nested Adobe wheel, action dialog and settings inspected. At launched 1260×862, the workspace is 814px high with scrollHeight814. At minimum 1050×722, both primary editor panels fit below 689px, with secondary convenience shortcuts reachable by scrolling. No horizontal overflow.
+- Screenshot evidence: `docs/orbit-dark.png`, `docs/orbit-light.png`, `docs/orbit-wheel.png`, `docs/orbit-compact.png`. The final dark screenshot is from the portable app with its native module active.
+- No observed primary-control clipping, overlap, unhandled renderer errors or unequal radial gutters in these inspected states.
+
+Remaining hardware validation: press Mouse4/Mouse5 on the user's actual mouse, especially with vendor remapping software. Multi-monitor geometry was unit-tested with negative coordinates and restricted work areas; mixed-DPI behavior still benefits from testing on physical monitors at different scales.
+
+## Application icon and Windows Settings correction
+
+- App icon: editable SVG and reproducible PNG/ICO exports. ICO contains 16,20,24,32,40,48,64,128,256px frames for Windows DPI variants.
+- PE resources were read from the rebuilt `Orbit.exe` using the packager's resedit library. All nine embedded image payloads exactly match `assets/orbit.ico`; the Electron icon is replaced in the executable itself.
+- Both BrowserWindows use `assets/orbit.ico`; tray uses the same icon. Windows AppUserModelID is `com.creationsoft.orbit`.
+- Packaged smoke passed with `iconLoaded:true`. Existing 11 tests and interactive UI script passed after the icon/label changes.
+- The Settings outline had an asymmetric manually accumulated relative path. Replaced with six identical teeth rotated around the icon center, preserving the outline weight and theme color.
+- Wheel labels now wrap to two lines with sector-aware widths instead of ellipsis. Isolated visual checks confirm the full «Параметри Windows» label fits in both editor and overlay.
+
+## Dropdown styling
+
+- Existing native select semantics are preserved with Chromium `appearance:base-select`; both trigger and picker now use Orbit theme tokens.
+- Visual QA: dark controls page and light action-dialog Windows-command picker inspected (`docs/dropdown-dark.png`, `docs/dropdown-light.png`). Selected option, hover surface, checkmark, border, shadow and scroll area match the current theme.
+- Actual ArrowUp+Enter selection persisted the changed activation mode in isolated testing. Escape closed the picker while preserving the action dialog; a second Escape closed the dialog.
+- Existing UI checks passed. Fixed test-window selection to identify the editor explicitly, since the overlay can finish loading first.
+
+## Dropdown placement and action-category transitions
+
+- Pickers open downward in the top layer over dialog/footer content. CSS anchor positioning aligns the picker with its trigger; vertical auto-flipping is disabled. Height is capped to the available area below the trigger and long lists scroll.
+- Actual Windows-command picker: trigger bottom534.5px, first option below it, picker height315.5px inside an862px viewport. Short two-option picker retains intrinsic height. Smaller560px viewport also clamps long content below the trigger without flipping.
+- Action-category redraws reuse the existing backdrop, dialog and header; only form and footer content update. All five category transitions preserve dialog identity and draft name, emit no new entry-animation events and focus the selected category. Closing restores the original Add button focus.
+- Existing UI suite passed after both changes. No user configuration was changed during isolated QA.
+
+## Consistent action-dialog dimensions
+
+- All five Add/Edit Action categories share a490×560px frame (height capped at90vh). Header/footer stay fixed; the form body can scroll on smaller viewports. Other dialogs retain their existing sizes.
+- Verified identical dialog dimensions, top position and footer position across app/folder/script/system/group at1260×862 and1050×722. Category content caused no body scrollbar at the standard size.
+- In the compact window the Windows picker still opens downward over the dialog and Escape preserves the parent dialog. Existing UI suite passed.
+
+## Installed-app search and per-action deletion
+
+- Windows catalog reads Start Menu shortcuts, registered App Paths and packaged app IDs, preserving separate versions and deduplicating equivalent launch targets. Read-only discovery on this PC found170 entries after deduplication, including8 Adobe matches. Cached queries completed in1ms in the backend probe; cold query2.86s. A bounded24h local cache stores names/launch metadata, without icon payloads.
+- Displayed classic apps use their real Windows file icons; icons are loaded lazily and reused in the action list and wheel. Packaged apps use the generic fallback where a file icon is unavailable.
+- Actual Illustrator2026 search was visually inspected. Search results form a keyboard-accessible combobox/popover with generation guards; stale query results cannot be selected, and dismissals cancel pending debounce callbacks.
+- `npm test`:22 tests pass, including catalog validation, aliases, versions, cache, refresh/cancellation and app-ID validation. Existing full UI suite passes.
+- `npm run test:search`: actual installed-app search, autofocus, keyboard choice without submission, automatic target/name, custom alias, persistence, empty search, Escape, file picker fallback, URL and per-action trash cancellation/confirmation pass. Tests use isolated settings and block application execution.
+- Trash controls are now visible for every individual action as well as groups. Confirmation removes only the menu entry and updates the wheel.
+
+## Outside-click cancellation
+
+- Added persistent `closeOnOutsideClick`, defaulting to `true` for old and new configurations, under Settings → Wheel behavior. Renderer tests cover on/off persistence, inside-center clicks, outside-circle clicks inside the transparent square, and Escape in either mode.
+- Global native observation handles left/right/middle button-down without consuming those events. Main process converts physical coordinates to DIP and cancels only when the click is outside the functional circle. Side-button capture remains separate; observer mode (button 0) supports manual wheel preview while side capture is paused.
+- Normal, global and Escape cancellation share `closeWheel()` and its `onWheelClosed` broadcast, which clears renderer group/hover timers.
+- 26 unit tests pass, including preference migration, opt-out, circle geometry on negative/scaled displays and global-event filtering. Native self-test verifies normal event emission/pass-through and observer side-button behavior. Lifecycle checks cover buttons 0/4/5 plus parent watchdog modes. Existing UI suite passes including the new preference checks. Packaged application smoke test also passes.
+
+## Wheel size
+
+- Appearance settings include a keyboard-accessible slider from 60% to 150%, a visible percentage, reset to 100% and preview. Input updates the readout immediately; committed changes persist automatically and restore slider focus.
+- The invoked wheel scales as a whole, including labels, icons, center, borders and gutters. A separate scale wrapper preserves the existing entry animation. The editor preview remains schematic.
+- `wheelSize` defaults to 520 for existing configurations. Validation accepts integers 312–780. Window geometry fits the monitor work area, including negative monitor origins. Each opening sends its actual mount size to the renderer; global and local outside-click cancellation use the displayed size.
+- Unit suite: 29 tests pass, including validation, migration and scaled geometry. UI coverage includes minimum/maximum keyboard input, reset, reload persistence, monitor fitting, inside clicks and outside-circle cancellation at each size.
+- Visually inspected dark wheel at 60% and 150%; captures: `output/playwright/wheel-size-60.png` and `output/playwright/wheel-size-150.png`.
+- Full UI suite and packaged smoke test pass. Light appearance settings inspected at the minimum native window size (Windows/DPI rounded the requested 1050×720 to viewport 1052×722), without clipping. Capture: `output/playwright/wheel-size-settings-light.png`.
+- Keyboard-only UI tests wait for entry animation and temporarily isolate unrelated shared-desktop pointer movements; the guard is removed in `finally`. Mouse and outside-click tests run without that guard.
+
+## GitHub updates · 0.1.1
+
+- Public source and release repository: `Validolio11/Orbit`. The runtime uses no GitHub credentials. Updates are explicit: check, download, install and restart. Current version comes from the packaged app.
+- Stable version comparison, exact release asset naming, bounded HTTPS downloads and redirects, release SHA-256 verification, archive traversal/link checks, and product/version/platform markers protect the update path. The controller rejects concurrent operations and permits installation only in packaged normal mode.
+- Windows helper prepares files before shutdown, confirms readiness, waits for a commit and main/native process exit, preserves the old directory, swaps the prepared directory, runs an isolated startup probe and restores the old version on failed startup. Settings in AppData are not moved.
+- `npm test`: 37 tests pass. Update tests cover metadata, versions, unsafe endpoints, failed requests/retry, concurrency, corrupt downloads, progress/preparation, isolated-mode refusal, and helper/flush/quit ordering.
+- `npm run test:updater`: real Windows fixtures verify preparation, bad checksum, traversal, wrong version, commit timeout, live-parent timeout, waiting for both processes, successful swap/health/restart/backup and failed-health rollback. Fixture settings retain their SHA-256 fingerprint.
+- Existing full UI suite passes. `npm run test:updates` covers no update, available, progress without replacing settings DOM, ready/install action, install errors, network retry and fixed repository IPC. Dark ready and light error views were inspected; screenshots under `output/playwright/updates-*.png` are excluded from the repository.
+- Directory replacement uses two renames and preserves a journal and backup. Recovery from sudden power loss between renames may require restoring the preserved `.Orbit-update-backup-*` directory next to the application. It is not a versioned-launcher design.
