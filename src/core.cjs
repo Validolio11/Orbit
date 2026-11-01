@@ -35,6 +35,7 @@ function validateState(value) {
   if (!['dark', 'light', 'system'].includes(value.theme)) throw new Error('Invalid theme.');
   if (![4, 5].includes(value.triggerButton)) throw new Error('Choose mouse button 4 or 5.');
   if (!['release', 'hover', 'click'].includes(value.activationMode)) throw new Error('Invalid activation mode.');
+  if (value.groupOpenMode !== undefined && !['hover', 'click'].includes(value.groupOpenMode)) throw new Error('Invalid group open mode.');
   if (!Number.isInteger(value.hoverDelay) || value.hoverDelay < 150 || value.hoverDelay > 2000) throw new Error('Hover delay must be between 150 and 2000 ms.');
   if (typeof value.enabled !== 'boolean' || typeof value.reducedMotion !== 'boolean') throw new Error('Invalid preference values.');
   if (value.closeOnOutsideClick !== undefined && typeof value.closeOnOutsideClick !== 'boolean') throw new Error('Invalid outside-click preference.');
@@ -52,7 +53,7 @@ function validateState(value) {
     return { id, name, icon: string(menu.icon ?? 'orbit', 'menu icon', 100), items: menu.items.map(item => validateAction(item, 0, ids)) };
   });
   if (!menus.some(menu => menu.id === value.activeMenuId)) throw new Error('The active menu does not exist.');
-  return { version: 1, theme: value.theme, triggerButton: value.triggerButton, activationMode: value.activationMode,
+  return { version: 1, theme: value.theme, triggerButton: value.triggerButton, activationMode: value.activationMode, groupOpenMode: value.groupOpenMode ?? 'hover',
     hoverDelay: value.hoverDelay, enabled: value.enabled, reducedMotion: value.reducedMotion, closeOnOutsideClick: value.closeOnOutsideClick ?? true, wheelSize: value.wheelSize ?? 520, menus, activeMenuId: value.activeMenuId };
 }
 

@@ -100,7 +100,7 @@ function adobeExecutable(product, executable) {
 
 function defaultState() {
   const action = (id, name, kind, target, icon, children = []) => ({ id, name, kind, target, args: '', icon, children });
-  return { version: 1, theme: 'dark', triggerButton: 4, activationMode: 'hover', hoverDelay: 350, enabled: true, reducedMotion: false, closeOnOutsideClick: true, wheelSize: 520,
+  return { version: 1, theme: 'dark', triggerButton: 4, activationMode: 'hover', groupOpenMode: 'hover', hoverDelay: 350, enabled: true, reducedMotion: false, closeOnOutsideClick: true, wheelSize: 520,
     activeMenuId: 'main', menus: [{ id: 'main', name: 'Головне меню', icon: 'orbit', items: [
       action('adobe', 'Adobe', 'group', '', 'adobe', [
         action('illustrator', 'Illustrator', 'app', adobeExecutable('Adobe Illustrator', 'Illustrator.exe'), 'illustrator'),

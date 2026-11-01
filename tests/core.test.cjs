@@ -67,6 +67,12 @@ test('wheel placement handles negative monitor coordinates and small work areas'
   assert.deepEqual(wheelGeometry({ x: 100, y: 100 }, { x: 0, y: 0, width: 480, height: 360 }), { bounds: { x: 0, y: 0, width: 480, height: 360 }, center: { x: 240, y: 180 } });
 });
 
+test('group open mode defaults to hover and accepts click', () => {
+  assert.equal(validateState(configuration()).groupOpenMode, 'hover');
+  assert.equal(validateState({ ...configuration(), groupOpenMode: 'click' }).groupOpenMode, 'click');
+  assert.throws(() => validateState({ ...configuration(), groupOpenMode: 'release' }), /group open mode/);
+});
+
 test('outside-click cancellation migrates old preferences and retains explicit opt-out', () => {
   assert.equal(validateState(configuration()).closeOnOutsideClick, true);
   assert.equal(validateState({ ...configuration(), closeOnOutsideClick: false }).closeOnOutsideClick, false);
