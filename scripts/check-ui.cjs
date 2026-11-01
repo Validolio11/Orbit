@@ -32,8 +32,8 @@ const fs = require('node:fs/promises');
     const add=async(kind,name,target)=>{
       await page.locator('.panel-head [data-command="add-action"]').click();
       await dialog().locator(`[data-kind="${kind}"]`).click();
-      // While adding a program its name is edited under "Додатково".
-      if(kind==='app')await dialog().locator('.app-advanced>summary').click();
+      // While adding a program or folder, its name and path are edited under the advanced section.
+      if(kind==='app'||kind==='folder')await dialog().locator('.app-advanced>summary').click();
       if(kind!=='system')await dialog().locator('#action-name').fill(name);
       else assert.equal(await dialog().locator('#action-name').count(),0,'Windows commands take the tile name');
       if(kind==='system')await dialog().locator(`[data-system="${target}"]`).click();

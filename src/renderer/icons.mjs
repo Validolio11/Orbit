@@ -66,6 +66,12 @@ const paths = {
   bluetooth:'<path d="m7 7 10 10-5 4V3l5 4L7 17"/>',
   calculator:'<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8v3H8zM8 14h.01m4 0h.01m4 0h.01M8 17.5h.01m4 0h.01m4 0h.01"/>',
   notepad:'<path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4M9 11h7m-7 3h7m-7 3h4"/>',
+  image:'<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/>',
+  film:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4m10 0h4M3 15h4m10 0h4"/>',
+  music:'<path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/>',
+  home:'<path d="M3 11 12 4l9 7v9H3z"/><path d="M10 20v-6h4v6"/>',
+  cloud:'<path d="M7 18h10a4 4 0 0 0 .5-8A6 6 0 0 0 6 9a4.5 4.5 0 0 0 1 9z"/>',
+  drive:'<rect x="3" y="13" width="18" height="7" rx="2"/><path d="M5 13 7.5 5h9L19 13M17 16.5h.01"/>',
 };
 export const systemIcons={explorer:'folder','task-manager':'tasks',screenshot:'screenshot',mute:'volumeMute','volume-up':'volumeUp','volume-down':'volumeDown',desktop:'desktop',settings:'settings',lock:'lock','media-play':'playPause',
   'control-panel':'sliders','recycle-bin':'trash',search:'search',run:'run','task-view':'windows',clipboard:'clipboard',emoji:'emoji',dictation:'mic',notifications:'bell',

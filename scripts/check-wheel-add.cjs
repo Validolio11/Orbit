@@ -48,6 +48,19 @@ const path=require('node:path');
     const visible=await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().includes('overlay=1')).isVisible());
     assert.equal(visible,false);
     console.log('PASS: plain "+" closes the wheel and opens the add dialog');
+
+    // Folder tab: a Windows tile name is not carried over, and a folder tile adds itself under its own name.
+    const form=page.getByRole('dialog');
+    await form.locator('[data-kind="system"]').click();await form.locator('[data-system="explorer"]').click();
+    await form.locator('[data-kind="folder"]').click();
+    await form.locator('.app-advanced>summary').click();
+    assert.equal(await form.locator('#action-name').inputValue(),'','A tile name must not carry over to another type');
+    const documents=form.locator('.folder-result').filter({hasText:'Документи'});await documents.waitFor();
+    const documentsPath=await documents.getAttribute('title');
+    await documents.click();await page.waitForSelector('#modal-root:empty',{state:'attached'});
+    const folder=(await state()).menus[0].items.at(-1);
+    assert.equal(folder.kind,'folder');assert.equal(folder.name,'Документи');assert.equal(folder.target,documentsPath);
+    console.log('PASS: folder tile adds itself with its name; names do not carry over between types');
     assert.deepEqual(errors,[]);
     console.log('ORBIT_WHEEL_ADD_OK');
   }finally{await app.close();}

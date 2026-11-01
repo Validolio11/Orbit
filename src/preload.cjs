@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld('orbit', Object.freeze({
   pickTarget: kind => ipcRenderer.invoke('orbit:pick-target', kind),
   pathForFile: file => webUtils.getPathForFile(file),
   inspectDropped: paths => ipcRenderer.invoke('orbit:inspect-dropped', paths),
+  listFolders: () => ipcRenderer.invoke('orbit:list-folders'),
   addWheelAction: groupPath => ipcRenderer.invoke('orbit:add-wheel-action', groupPath),
   openAddDialog: groupPath => ipcRenderer.invoke('orbit:open-add-dialog', groupPath),
   onWheelForeground: callback => subscribe('orbit:wheel-foreground', callback),

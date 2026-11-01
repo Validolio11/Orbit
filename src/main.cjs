@@ -254,6 +254,54 @@ async function addWheelAction(groupPath) {
   return { ok: true, id: action.id, name: action.name };
 }
 
+// Folders offered as tiles: Explorer's Quick Access (pinned and frequent), standard folders and drives.
+let quickAccessRequest = null;
+function readQuickAccess() {
+  if (quickAccessRequest) return quickAccessRequest;
+  // Quick Access lists pinned and frequent folders; "This PC" gives drives with their Explorer labels.
+  const script = "$ErrorActionPreference='Stop';[Console]::OutputEncoding=New-Object Text.UTF8Encoding $false;$shell=New-Object -ComObject Shell.Application;" +
+    "@{quick=@($shell.Namespace('shell:::{679f85cb-0220-4080-b29b-5540cc05aab6}').Items()|Where-Object {$_.IsFolder -and $_.Path -match '^[A-Za-z]:\\\\'}|Select-Object -First 24|ForEach-Object {@{name=$_.Name;path=$_.Path}});" +
+    "drives=@($shell.Namespace('shell:MyComputerFolder').Items()|Where-Object {$_.Path -match '^[A-Za-z]:\\\\$'}|ForEach-Object {@{name=$_.Name;path=$_.Path}})}|ConvertTo-Json -Compress -Depth 4";
+  const powershell = path.join(process.env.WINDIR || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+  quickAccessRequest = new Promise(resolve => {
+    let output = '', settled = false;
+    const finish = rows => { if (settled) return; settled = true; clearTimeout(timer); resolve(rows); };
+    const child = spawn(powershell, ['-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], { windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
+    const empty = { quick: [], drives: [] };
+    const timer = setTimeout(() => { child.kill(); finish(empty); }, 5000);
+    const rows = value => (Array.isArray(value) ? value : value ? [value] : []).filter(row => row && typeof row.name === 'string' && typeof row.path === 'string' && path.isAbsolute(row.path));
+    child.stdout.setEncoding('utf8');
+    child.stdout.on('data', chunk => { output += chunk; if (output.length > 65536) { child.kill(); finish(empty); } });
+    child.once('error', () => finish(empty));
+    child.once('exit', () => {
+      try { const result = JSON.parse(output.trim() || '{}'); finish({ quick: rows(result.quick), drives: rows(result.drives) }); }
+      catch { finish(empty); }
+    });
+  });
+  // Quick Access changes as the user works, so the answer is reused only briefly.
+  quickAccessRequest.finally(() => setTimeout(() => { quickAccessRequest = null; }, 30000));
+  return quickAccessRequest;
+}
+
+async function listFolders() {
+  const known = [], drives = [], quick = [], seen = new Set();
+  const add = (list, group, name, folderPath, icon) => {
+    const key = path.resolve(folderPath).toLowerCase();
+    if (seen.has(key) || !fs.existsSync(folderPath)) return;
+    seen.add(key); list.push({ group, name: name.slice(0, 100), path: folderPath, icon });
+  };
+  const shellFolders = process.platform === 'win32' && !ISOLATED ? await readQuickAccess() : { quick: [], drives: [] };
+  // Standard folders keep Orbit's Ukrainian names even when Explorer reports English ones.
+  for (const [key, name, icon] of [['desktop', 'Робочий стіл', 'desktop'], ['documents', 'Документи', 'folder'], ['downloads', 'Завантаження', 'import'], ['pictures', 'Зображення', 'image'], ['videos', 'Відео', 'film'], ['music', 'Музика', 'music'], ['home', 'Особиста папка', 'home']]) {
+    try { add(known, 'known', name, app.getPath(key), icon); } catch { }
+  }
+  if (process.env.OneDrive) add(known, 'known', 'OneDrive', process.env.OneDrive, 'cloud');
+  for (const row of shellFolders.drives) add(drives, 'drive', row.name, row.path, 'drive');
+  if (process.platform === 'win32' && !drives.length) for (const letter of 'CDEFGHIJKLMNOPQRSTUVWXYZ') add(drives, 'drive', `Диск ${letter}:`, `${letter}:\\`, 'drive');
+  for (const row of shellFolders.quick) add(quick, 'quick', row.name, row.path, 'folder');
+  return [...quick, ...known, ...drives];
+}
+
 async function seedFirstRunApps() {
   const snapshot = JSON.stringify(state);
   const found = await appCatalog.findNamed(FIRST_RUN_APPS).catch(() => []);
@@ -461,6 +509,7 @@ function registerIPC() {
   handle('orbit:maximize', () => mainWindow.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize());
   handle('orbit:close-window', () => mainWindow.close());
   handle('orbit:add-wheel-action', addWheelAction);
+  handle('orbit:list-folders', listFolders);
   handle('orbit:open-add-dialog', groupPath => {
     if (!Array.isArray(groupPath) || !groupPath.every(id => typeof id === 'string')) throw new Error('Invalid group path.');
     closeWheel(); showMain({ page: 'menus', groupPath, add: true });
