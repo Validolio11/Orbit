@@ -139,17 +139,18 @@ const fs = require('node:fs/promises');
     assert.equal(overlayVisible,false);
     console.log('PASS: light/system/dark theme, reduced motion round trip, global overlay/group/back/Escape');
 
+    // The shared Windows desktop can deliver unrelated physical mouse movement, including the
+    // move that selects whatever sector sits under the cursor when the wheel appears.
+    // Isolate it before opening, only for this keyboard scenario; the mouse scenarios run unguarded.
+    await overlay.evaluate(()=>{
+      window.__orbitKeyboardPointerGuard=new AbortController();
+      document.addEventListener('pointermove',event=>event.stopImmediatePropagation(),{capture:true,signal:window.__orbitKeyboardPointerGuard.signal});
+    });
     const previousWheel=await overlay.locator('.wheel').elementHandle();
     await command('preview').click();
     await overlay.waitForFunction(previous=>!previous.isConnected,previousWheel);
     await previousWheel.dispose();
     await overlay.bringToFront();
-    // The shared Windows desktop can deliver unrelated physical mouse movement.
-    // Isolate it only for this keyboard scenario; the mouse scenarios run unguarded.
-    await overlay.evaluate(()=>{
-      window.__orbitKeyboardPointerGuard=new AbortController();
-      document.addEventListener('pointermove',event=>event.stopImmediatePropagation(),{capture:true,signal:window.__orbitKeyboardPointerGuard.signal});
-    });
     try{
       await overlay.locator('.wheel').evaluate(async wheel=>{
         await Promise.all(wheel.getAnimations({subtree:true}).map(animation=>animation.finished.catch(()=>{})));
