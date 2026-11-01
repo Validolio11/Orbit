@@ -136,3 +136,5 @@ Remaining hardware validation: press Mouse4/Mouse5 on the user's actual mouse, e
 
 - Inside Electron the patched `fs` reports `resources/app.asar` as a directory, so the updater rejected every valid package with "Пакет Orbit неповний.". The updater now uses `original-fs` under Electron. A staged package with a real `app.asar` fails with the 0.1.6 updater and passes with the fix under `ELECTRON_RUN_AS_NODE`.
 - Installs at 0.1.6 or older carry the faulty check and must install 0.1.7 manually once; later releases update automatically.
+- `npm run verify:release` now prepares the public release inside Electron (`ELECTRON_RUN_AS_NODE`) and asserts that Electron's asar handling is active, matching the running app. Against the published `v0.1.7` it passes with the fixed updater and fails with "Пакет Orbit неповний." with the 0.1.6 updater.
+- Old updaters also left `.Orbit-update-stage-*` folders holding a locked `resources/app.asar` next to the app after each failed attempt. The fixed updater removes its stage completely; leftovers are freed once the old Orbit process exits.

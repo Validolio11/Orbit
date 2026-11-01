@@ -4,9 +4,18 @@ const fs=require('node:fs/promises');
 const path=require('node:path');
 const os=require('node:os');
 const assert=require('node:assert/strict');
+const {spawnSync}=require('node:child_process');
 
-(async()=>{
-  if(!process.argv.includes('--ui-only')){
+// Orbit runs the updater inside Electron, whose fs treats app.asar as a folder, so preparation is verified there too.
+function prepareInElectron(){
+  const result=spawnSync(require('electron'),[__filename,'--prepare-only'],{stdio:'inherit',env:{...process.env,ELECTRON_RUN_AS_NODE:'1'}});
+  assert.equal(result.status,0,'Public release preparation failed inside Electron');
+}
+
+async function verifyPreparation(){
+  assert.ok(process.versions.electron,'Preparation must be verified inside Electron');
+  const packagedAsar=path.resolve(__dirname,'../dist/Orbit-win32-x64/resources/app.asar');
+  assert.ok(require('node:fs').statSync(packagedAsar).isDirectory(),'Electron asar handling must be active, as in Orbit');
   const root=await fs.mkdtemp(path.join(os.tmpdir(),'orbit-release-verify-'));
   const updater=createUpdater({version:'0.1.0',repo:'Validolio11/Orbit',installDir:path.resolve(__dirname,'../dist/Orbit-win32-x64'),updatesDir:root,helperPath:path.resolve(__dirname,'../native/Update.ps1'),isolated:true,onStatus:s=>{if(s.phase!=='downloading'||s.progress===0||s.progress===100)console.log(s.phase,s.version||'',s.message||'');}});
   try{
@@ -20,7 +29,11 @@ const assert=require('node:assert/strict');
     assert.equal(path.dirname(resolved).toLowerCase(),(await fs.realpath(os.tmpdir())).toLowerCase());assert.ok(path.basename(resolved).startsWith('orbit-release-verify-'));
     await fs.rm(resolved,{recursive:true,force:true,maxRetries:3});
   }
-  }
+}
+
+(async()=>{
+  if(process.argv.includes('--prepare-only')){await verifyPreparation();return;}
+  if(!process.argv.includes('--ui-only'))prepareInElectron();
   const {_electron}=require('playwright');
   const app=await _electron.launch({args:['--e2e'],executablePath:path.resolve(__dirname,'../dist/Orbit-win32-x64/Orbit.exe')});
   try{

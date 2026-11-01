@@ -21,6 +21,7 @@
     "release": "npm run package && npm run release:archive",
     "smoke:packaged": "node scripts/smoke-packaged.cjs",
     "test:updates": "node scripts/check-updates.cjs",
+    "verify:release": "node scripts/verify-release.cjs",
     "test:updater": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-updater.ps1",
     "test:drag": "node scripts/check-drag.cjs",
     "test:icons": "node scripts/check-icons.cjs",
