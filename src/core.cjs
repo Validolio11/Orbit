@@ -1,4 +1,6 @@
-const SYSTEM_ACTIONS = new Set(['explorer', 'task-manager', 'screenshot', 'mute', 'volume-up', 'volume-down', 'desktop', 'settings', 'lock', 'media-play']);
+const SYSTEM_ACTIONS = new Set(['explorer', 'task-manager', 'screenshot', 'mute', 'volume-up', 'volume-down', 'desktop', 'settings', 'lock', 'media-play',
+  'control-panel', 'recycle-bin', 'search', 'run', 'task-view', 'clipboard', 'emoji', 'dictation', 'notifications', 'sound-settings', 'bluetooth',
+  'media-prev', 'media-next', 'calculator', 'notepad']);
 const ACTION_KINDS = new Set(['app', 'folder', 'script', 'system', 'group']);
 const { validatePackagedTarget } = require('./app-catalog.cjs');
 

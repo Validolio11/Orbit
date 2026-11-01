@@ -39,6 +39,8 @@ test('wheel capacity is 12 actions and group nesting is bounded', () => {
 test('Windows action targets are allowlisted and paths reject embedded NULs', () => {
   assert.equal(validateAction(action('volume', 'system', 'mute')).target, 'mute');
   assert.throws(() => validateAction(action('bad', 'system', 'shutdown /s')), /Unsupported Windows/);
+  for (const target of ['control-panel', 'recycle-bin', 'search', 'run', 'task-view', 'clipboard', 'emoji', 'dictation', 'notifications', 'sound-settings', 'bluetooth', 'media-prev', 'media-next', 'calculator', 'notepad'])
+    assert.equal(validateAction(action(target, 'system', target)).target, target);
   assert.throws(() => validateAction(action('bad', 'app', 'C:\\bad\0.exe')), /target/);
 });
 

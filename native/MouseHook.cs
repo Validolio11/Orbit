@@ -211,6 +211,15 @@ internal static class MouseHook
             case "volume-up": keys = new ushort[] { 0xAF }; break;
             case "volume-down": keys = new ushort[] { 0xAE }; break;
             case "media-play": keys = new ushort[] { 0xB3 }; break;
+            case "media-next": keys = new ushort[] { 0xB0 }; break;
+            case "media-prev": keys = new ushort[] { 0xB1 }; break;
+            case "search": keys = new ushort[] { 0x5B, 0x53 }; break;
+            case "run": keys = new ushort[] { 0x5B, 0x52 }; break;
+            case "task-view": keys = new ushort[] { 0x5B, 0x09 }; break;
+            case "clipboard": keys = new ushort[] { 0x5B, 0x56 }; break;
+            case "emoji": keys = new ushort[] { 0x5B, 0xBE }; break;
+            case "dictation": keys = new ushort[] { 0x5B, 0x48 }; break;
+            case "notifications": keys = new ushort[] { 0x5B, 0x4E }; break;
             default: Console.Error.WriteLine("Unsupported system action."); return 2;
         }
         var inputs = new INPUT[keys.Length * 2];

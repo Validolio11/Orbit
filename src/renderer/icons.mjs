@@ -54,8 +54,22 @@ const paths = {
   desktop:'<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8m-4-4v4M7 13h4"/>',
   lock:'<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
   playPause:'<path d="m3 6 8 6-8 6zM16 6v12m4-12v12"/>',
+  trackPrev:'<path d="M6 5v14m13-13-9 6 9 6z"/>',
+  trackNext:'<path d="M18 5v14M5 6l9 6-9 6z"/>',
+  sliders:'<path d="M4 6h9m4 0h3M4 12h3m4 0h9M4 18h11m4 0h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/>',
+  run:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 8h18M7 12l3 2.5L7 17m5 0h4"/>',
+  windows:'<rect x="3" y="7" width="13" height="11" rx="1.5"/><path d="M8 7V4.5A1.5 1.5 0 0 1 9.5 3h10A1.5 1.5 0 0 1 21 4.5v9a1.5 1.5 0 0 1-1.5 1.5H16"/>',
+  clipboard:'<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1M9 10h6m-6 4h6m-6 4h3"/>',
+  emoji:'<circle cx="12" cy="12" r="9"/><path d="M8 14a5 5 0 0 0 8 0M9 9.5h.01m6 0h.01"/>',
+  mic:'<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0m-7 7v3"/>',
+  bell:'<path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4"/>',
+  bluetooth:'<path d="m7 7 10 10-5 4V3l5 4L7 17"/>',
+  calculator:'<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8v3H8zM8 14h.01m4 0h.01m4 0h.01M8 17.5h.01m4 0h.01m4 0h.01"/>',
+  notepad:'<path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4M9 11h7m-7 3h7m-7 3h4"/>',
 };
-export const systemIcons={explorer:'folder','task-manager':'tasks',screenshot:'screenshot',mute:'volumeMute','volume-up':'volumeUp','volume-down':'volumeDown',desktop:'desktop',settings:'settings',lock:'lock','media-play':'playPause'};
+export const systemIcons={explorer:'folder','task-manager':'tasks',screenshot:'screenshot',mute:'volumeMute','volume-up':'volumeUp','volume-down':'volumeDown',desktop:'desktop',settings:'settings',lock:'lock','media-play':'playPause',
+  'control-panel':'sliders','recycle-bin':'trash',search:'search',run:'run','task-view':'windows',clipboard:'clipboard',emoji:'emoji',dictation:'mic',notifications:'bell',
+  'sound-settings':'volume',bluetooth:'bluetooth','media-prev':'trackPrev','media-next':'trackNext',calculator:'calculator',notepad:'notepad'};
 export function icon(name,size=20){return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name]||paths.app}</svg>`;}
 function fallbackItemIcon(item,size=22){
   const n = (item.name||'').toLowerCase();

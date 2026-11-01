@@ -279,6 +279,13 @@ function startProcess(command, args, options = {}) {
   });
 }
 
+const SYSTEM_PROGRAMS = {
+  explorer: [['explorer.exe']], 'recycle-bin': [['explorer.exe'], 'shell:RecycleBinFolder'],
+  'task-manager': [['System32', 'Taskmgr.exe']], 'control-panel': [['System32', 'control.exe']],
+  calculator: [['System32', 'calc.exe']], notepad: [['System32', 'notepad.exe']],
+};
+const SYSTEM_SETTINGS = { settings: 'ms-settings:', 'sound-settings': 'ms-settings:sound', bluetooth: 'ms-settings:bluetooth' };
+
 function nativeAction(target) {
   return new Promise((resolve, reject) => {
     const child = spawn(NATIVE, [`--action=${target}`], { windowsHide: true, stdio: 'ignore' });
@@ -298,9 +305,10 @@ async function executeAction(input) {
     if (!action.target.trim()) throw new Error('Спочатку виберіть шлях до застосунку або файлу в налаштуваннях дії.');
     if (action.kind === 'system') {
       const windows = process.env.WINDIR || 'C:\\Windows';
-      if (action.target === 'explorer') await startProcess(path.join(windows, 'explorer.exe'), []);
-      else if (action.target === 'task-manager') await startProcess(path.join(windows, 'System32', 'Taskmgr.exe'), []);
-      else if (action.target === 'settings') await shell.openExternal('ms-settings:');
+      const program = SYSTEM_PROGRAMS[action.target];
+      if (program) await startProcess(path.join(windows, ...program[0]), program.slice(1));
+      else if (SYSTEM_SETTINGS[action.target]) await shell.openExternal(SYSTEM_SETTINGS[action.target]);
+      // Keyboard shortcuts go through the native helper after the wheel has released focus.
       else { await new Promise(resolve => setTimeout(resolve, 100)); await nativeAction(action.target); }
     } else if (action.kind === 'app' && action.target.startsWith('app-id:')) {
       const appId = validatePackagedTarget(action.target, action.args);

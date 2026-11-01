@@ -10,7 +10,13 @@ const api=window.orbit;
 const overlay=new URLSearchParams(location.search).has('overlay');
 const root=document.querySelector('#app');
 const kinds={app:'Застосунок',folder:'Папка',script:'Скрипт',system:'Windows',group:'Група'};
-const systemNames={explorer:'Провідник', 'task-manager':'Диспетчер завдань',screenshot:'Знімок екрана',mute:'Вимкнути / увімкнути звук','volume-up':'Збільшити гучність','volume-down':'Зменшити гучність',desktop:'Показати робочий стіл',settings:'Параметри Windows',lock:'Заблокувати комп’ютер','media-play':'Відтворення / пауза'};
+const systemNames={
+  explorer:'Провідник','task-manager':'Диспетчер завдань',settings:'Параметри Windows','control-panel':'Панель керування','recycle-bin':'Кошик',
+  search:'Пошук Windows',run:'Виконати','task-view':'Усі вікна',desktop:'Показати робочий стіл',lock:'Заблокувати комп’ютер',
+  screenshot:'Знімок екрана',clipboard:'Буфер обміну',emoji:'Емодзі',dictation:'Голосове введення',notifications:'Сповіщення',
+  mute:'Вимкнути / увімкнути звук','volume-down':'Зменшити гучність','volume-up':'Збільшити гучність','sound-settings':'Налаштування звуку',bluetooth:'Bluetooth',
+  'media-prev':'Попередній трек','media-play':'Відтворення / пауза','media-next':'Наступний трек',calculator:'Калькулятор',notepad:'Блокнот',
+};
 const activationNames={release:'Відпускання кнопки',hover:'Наведення курсора',click:'Клацання мишею'};
 const groupOpenNames={hover:'Наведення курсора',click:'Клацання мишею'};
 let state,runtime={hookReady:false,hookError:null,shortcutRegistered:false};
