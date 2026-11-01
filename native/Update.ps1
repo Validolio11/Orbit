@@ -9,11 +9,34 @@ param(
     [Parameter(Mandatory = $true)][string]$ExpectedSha256,
     [int]$ParentPid = 0,
     [int]$NativePid = 0,
-    [ValidateRange(1, 120)][int]$WaitSeconds = 60
+    [ValidateRange(1, 120)][int]$WaitSeconds = 60,
+    [switch]$Detach
 )
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+
+if ($Detach) {
+    # Node keeps direct children in a kill-on-close job and PowerShell cannot run as a detached process,
+    # so the installer restarts itself as a hidden grandchild that outlives Orbit.
+    $arguments = @('-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', ('"' + $PSCommandPath + '"'))
+    foreach ($entry in $PSBoundParameters.GetEnumerator()) {
+        if ($entry.Key -eq 'Detach') { continue }
+        $value = [string]$entry.Value
+        if ($value.Contains('"')) { throw 'Invalid update argument.' }
+        if ($value.EndsWith('\')) { $value += '\' }
+        $arguments += @(('-' + $entry.Key), ('"' + $value + '"'))
+    }
+    $start = New-Object Diagnostics.ProcessStartInfo (Join-Path $PSHOME 'powershell.exe')
+    $start.Arguments = $arguments -join ' '
+    # A process whose current directory is inside the app folder would block moving that folder.
+    $start.WorkingDirectory = Split-Path -Parent $PSCommandPath
+    $start.UseShellExecute = $false
+    $start.CreateNoWindow = $true
+    $installer = [Diagnostics.Process]::Start($start)
+    [Console]::Out.Write($installer.Id)
+    exit 0
+}
 $productId = 'com.creationsoft.orbit'
 $createdStage = $false
 $oldMoved = $false
@@ -238,6 +261,14 @@ try {
     Run-SmokeTest
     Write-Json 'journal.json' @{ phase = 'verified'; install = $install; backup = $backup; version = $ExpectedVersion }
     Write-Json 'result.json' @{ ok = $true; version = $ExpectedVersion; backup = $backup }
+    # Only the backup of this verified update is kept; older ones would add a full app copy per update.
+    foreach ($previous in [IO.Directory]::GetDirectories($installParent, '.Orbit-update-backup-*')) {
+        try {
+            if ((Same-Path $previous $backup) -or [IO.Path]::GetFileName($previous) -notmatch '^\.Orbit-update-backup-[0-9a-f]{32}$') { continue }
+            if (([IO.File]::GetAttributes($previous) -band [IO.FileAttributes]::ReparsePoint) -ne 0) { continue }
+            Remove-Item -LiteralPath $previous -Recurse -Force
+        } catch { }
+    }
     [void](Start-Process -FilePath (Join-Path $install 'Orbit.exe') -WorkingDirectory $install -WindowStyle Hidden -PassThru)
     exit 0
 } catch {
@@ -259,7 +290,7 @@ try {
     if ($work -and [IO.Directory]::Exists($work)) {
         try { Write-Json $(if ($Mode -eq 'Prepare') { 'prepared.json' } else { 'result.json' }) @{ ok = $false; error = $reason; rolledBack = $rolledBack } } catch { }
     }
-    if ($rolledBack -and $parentExited) {
+    if ($parentExited -and ($rolledBack -or -not $oldMoved)) {
         try { [void](Start-Process -FilePath (Join-Path $install 'Orbit.exe') -WorkingDirectory $install -WindowStyle Hidden -PassThru) } catch { }
     }
     exit 1

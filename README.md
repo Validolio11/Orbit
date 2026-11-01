@@ -6,7 +6,7 @@ Windows-застосунок для швидкого запуску дій че�
 
 Готова portable-збірка: `dist/Orbit-win32-x64/Orbit.exe`. Залишайте виконуваний файл разом з усією папкою збірки.
 
-Завантаження готової версії: [GitHub Releases](https://github.com/Validolio11/Orbit/releases/latest). Розпакуйте ZIP і запустіть `Orbit.exe` з папки `Orbit-win32-x64`.
+Завантаження готової версії: [GitHub Releases](https://github.com/Validolio11/Orbit/releases/latest). Запустіть `Orbit-Setup-<версія>.exe`: Orbit встановиться для поточного користувача в `%LOCALAPPDATA%\Programs\Orbit` без прав адміністратора, з ярликами на робочому столі й у меню «Пуск». Видалити можна в «Параметри → Програми». Меню й налаштування зберігаються в `%APPDATA%\Orbit`. Портативний ZIP теж доступний: розпакуйте його й запустіть `Orbit.exe` з папки `Orbit-win32-x64`.
 
 Для розробки потрібні Windows x64, Node.js 22.12+ та системний .NET Framework 4.x:
 
@@ -72,7 +72,7 @@ npm version patch
 git push origin main --follow-tags
 ```
 
-GitHub Actions на Windows запускає перевірки, створює portable ZIP і публікує GitHub Release з контрольною сумою. Версія тегу має збігатися з `package.json`. Для локального створення архіву: `npm run release`; файли з'являться у `release/`.
+GitHub Actions на Windows запускає перевірки, створює portable ZIP та інсталятор `Orbit-Setup-<версія>.exe` і публікує GitHub Release з контрольною сумою. Версія тегу має збігатися з `package.json`. Для локального створення архіву: `npm run release`, інсталятора з нього: `npm run installer`; файли з'являться у `release/`.
 
 Native listener обробляє стандартні XBUTTON1/XBUTTON2. Кнопки, перепризначені драйвером виробника, потрібно перевірити на конкретній миші.
 

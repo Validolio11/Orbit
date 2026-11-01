@@ -169,8 +169,8 @@ function createUpdater(options) {
     finally { clearTimeout(timer); activeAbort = null; busy = false; }
   }
 
-  function runHelper(args, detach = false) {
-    const child = launch(powershell, ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', prepared.helper, ...args], { windowsHide: true, detached: detach, stdio: 'ignore' });
+  function runHelper(args) {
+    const child = launch(powershell, ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', prepared.helper, ...args], { cwd: path.dirname(prepared.helper), windowsHide: true, stdio: 'ignore' });
     activeHelper = child;
     return child;
   }
@@ -265,15 +265,16 @@ function createUpdater(options) {
         prepared.helper = await copyHelper(prepared.workDir);
         const nativePid = getNativePid() || 0;
         if (!Number.isSafeInteger(parentPid) || parentPid <= 0 || !Number.isSafeInteger(nativePid) || nativePid < 0) throw new UpdateError('Неправильний стан процесу Orbit.');
-        const child = runHelper(['-Mode', 'Install', '-InstallDir', paths.install, '-StagePath', prepared.stage, '-BackupPath', prepared.backup, '-ArchivePath', prepared.archive, '-WorkDir', prepared.workDir, '-ExpectedVersion', prepared.version, '-ExpectedSha256', prepared.sha256, '-ParentPid', String(parentPid), '-NativePid', String(nativePid)], true);
-        let exited = false, spawnError = null;
-        child.once('error', error => { spawnError = error; }); child.once('exit', () => { exited = true; });
+        const child = runHelper(['-Mode', 'Install', '-InstallDir', paths.install, '-StagePath', prepared.stage, '-BackupPath', prepared.backup, '-ArchivePath', prepared.archive, '-WorkDir', prepared.workDir, '-ExpectedVersion', prepared.version, '-ExpectedSha256', prepared.sha256, '-ParentPid', String(parentPid), '-NativePid', String(nativePid), '-Detach']);
+        // The launcher exits once it has started the independent installer, which then reports readiness itself.
+        let launchFailed = false;
+        child.once('error', () => { launchFailed = true; }); child.once('exit', code => { if (code !== 0) launchFailed = true; });
         try {
           const deadline = Date.now() + 15000;
           let ready = false;
           while (!ready && Date.now() < deadline && !disposed) {
-            if (spawnError || exited) throw new UpdateError('Модуль встановлення не запустився. Orbit залишився відкритим.');
-            try { const value = await readSmallJSON(path.join(prepared.workDir, 'ready.json')); ready = value.token === prepared.id && value.pid === child.pid; } catch { }
+            if (launchFailed) throw new UpdateError('Модуль встановлення не запустився. Orbit залишився відкритим.');
+            try { const value = await readSmallJSON(path.join(prepared.workDir, 'ready.json')); ready = value.token === prepared.id && Number.isSafeInteger(value.pid) && value.pid > 0; } catch { }
             if (!ready) await new Promise(resolve => setTimeout(resolve, 50));
           }
           if (!ready || disposed) throw new UpdateError('Модуль встановлення не підтвердив готовність.');

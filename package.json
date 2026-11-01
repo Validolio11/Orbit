@@ -1,7 +1,7 @@
 {
   "name": "orbit-desktop",
   "productName": "Orbit",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "private": true,
   "description": "Orbit — a mouse-first radial launcher for Windows",
   "main": "src/main.cjs",
@@ -18,6 +18,7 @@
     "smoke": "npm run native && electron . --smoke-test",
     "package": "npm run icons && npm run native && electron-packager . Orbit --platform=win32 --arch=x64 --out=dist --overwrite --icon=assets/orbit.ico --asar.unpackDir=native --ignore=\"(^/release|^/\\.git($|/)|^/\\.github($|/)|^/tests|^/test-results|^/output|^/docs|^/dist|playwright.config|package-lock)\"",
     "release:archive": "node scripts/create-release.cjs",
+    "installer": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-installer.ps1",
     "release": "npm run package && npm run release:archive",
     "smoke:packaged": "node scripts/smoke-packaged.cjs",
     "test:updates": "node scripts/check-updates.cjs",

@@ -96,8 +96,8 @@ test('redirects to other hosts and oversized API responses fail without followin
 });
 
 test('installer arms only after helper readiness and saved state; app shutdown preserves the armed helper',async t=>{
-  const events=[];let killed=false,commitFile,updater;
-  const launch=(_exe,args)=>{
+  const events=[];let killed=false,commitFile,updater,installLaunch;
+  const launch=(_exe,args,options)=>{
     const child=new EventEmitter();child.pid=234567;child.kill=()=>{killed=true;};child.unref=()=>{};
     const arg=key=>args[args.indexOf(key)+1],work=arg('-WorkDir');
     (async()=>{
@@ -107,8 +107,10 @@ test('installer arms only after helper readiness and saved state; app shutdown p
         await fs.writeFile(path.join(stage,'orbit-release.json'),JSON.stringify({product:PRODUCT,version:'0.2.0',platform:'win32',arch:'x64'}));
         await fs.writeFile(path.join(work,'prepared.json'),'{"ok":true}');child.emit('exit',0);
       }else{
-        events.push('helper');commitFile=path.join(work,'commit.json');
-        await fs.writeFile(path.join(work,'ready.json'),JSON.stringify({token:path.basename(work),pid:child.pid}));
+        events.push('helper');commitFile=path.join(work,'commit.json');installLaunch={args,options};
+        // The launcher exits before the relaunched installer reports readiness under its own PID.
+        child.emit('exit',0);await new Promise(resolve=>setTimeout(resolve,120));
+        await fs.writeFile(path.join(work,'ready.json'),JSON.stringify({token:path.basename(work),pid:345678}));
       }
     })().catch(error=>child.emit('error',error));
     return child;
@@ -119,4 +121,5 @@ test('installer arms only after helper readiness and saved state; app shutdown p
   updater=f.updater;await updater.check();await updater.download();
   assert.equal((await updater.install()).phase,'installing');
   assert.deepEqual(events,['helper','saved','quit']);assert.equal(killed,false);
+  assert.ok(installLaunch.args.includes('-Detach'));assert.ok(!installLaunch.options.detached,'PowerShell exits without running when spawned detached');
 });
