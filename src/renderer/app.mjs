@@ -172,6 +172,8 @@ function actionDialog(id){
       draft.name=String(form.get('name')||'').trim();draft.target=draft.kind==='group'?'':String(form.get('target')||'').trim();draft.args=String(form.get('args')||'');
     };
     if(draft.kind==='app')modalCleanup=mountAppPicker({form:document.querySelector('#action-form'),draft,config:pickerConfig,onChoose:entry=>{
+      // The details element is the source of truth; its toggle event may not have arrived yet.
+      pickerConfig.detailsOpen=!!document.querySelector('.app-advanced')?.open;
       capture();if(!draft.name||draft.name===pickerConfig.selectedName)draft.name=entry.name;
       draft.target=entry.target;draft.args=entry.args||'';draft.icon='app';pickerConfig.mode='search';pickerConfig.selectedName=entry.name;pickerConfig.query=entry.name;
       rememberAppIcon(entry.target,entry.icon);draw();
@@ -184,7 +186,7 @@ function actionDialog(id){
       document.querySelectorAll('[data-system]').forEach(other=>{const active=other===button;other.classList.toggle('active',active);other.setAttribute('aria-pressed',String(active));});
     });
     document.querySelectorAll('[data-system]').forEach(button=>button.ondblclick=()=>{draft.target=button.dataset.system;submit();});
-    document.querySelector('#browse-target')?.addEventListener('click',async()=>{capture();try{const value=await api.pickTarget(draft.kind);if(value){draft.target=value;const name=value.split(/[\\/]/).pop().replace(/\.[^.]+$/,'');if(!draft.name||draft.name===pickerConfig.selectedName)draft.name=name;if(draft.kind==='app'){pickerConfig.mode='search';pickerConfig.selectedName=name;pickerConfig.query=name;draw();}else{document.querySelector('#action-target').value=value;document.querySelector('#action-name').value=draft.name;}}}catch(error){document.querySelector('#form-error').textContent=error.message;}});
+    document.querySelector('#browse-target')?.addEventListener('click',async()=>{capture();try{const value=await api.pickTarget(draft.kind);if(value){draft.target=value;const name=value.split(/[\\/]/).pop().replace(/\.[^.]+$/,'');if(!draft.name||draft.name===pickerConfig.selectedName)draft.name=name;if(draft.kind==='app'){pickerConfig.mode='search';pickerConfig.selectedName=name;pickerConfig.query=name;draw();if(!existing&&!pickerConfig.detailsOpen)submit();}else{document.querySelector('#action-target').value=value;document.querySelector('#action-name').value=draft.name;}}}catch(error){document.querySelector('#form-error').textContent=error.message;}});
     document.querySelector('#delete-action')?.addEventListener('click',()=>deleteDialog('action',draft.id));
     document.querySelector('#action-form').onsubmit=event=>{event.preventDefault();submit();};
   }

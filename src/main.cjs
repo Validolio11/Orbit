@@ -66,6 +66,11 @@ async function readHighResolutionIcon(target) {
 }
 
 const appCatalog = createAppCatalog({ cachePath: () => path.join(app.getPath('userData'), 'app-catalog.json'), loadIcon: async target => {
+  if (process.platform === 'win32' && /^app-id:/.test(target)) {
+    let appId;
+    try { appId = validatePackagedTarget(target); } catch { return null; }
+    return (await readHighResolutionIcon('shell:AppsFolder\\' + appId))?.toDataURL() || null;
+  }
   if (!isLocalAppPath(target)) return null;
   if (!(await fsp.stat(target).catch(() => null))?.isFile()) return null;
   let iconTarget = target;
@@ -450,7 +455,7 @@ function registerIPC() {
   handle('orbit:show-wheel', () => showWheel());
   handle('orbit:close-wheel', closeWheel);
   handle('orbit:execute-action', executeAction);
-  handle('orbit:search-apps', (query = '', refresh = false) => appCatalog.searchApps(query, refresh));
+  handle('orbit:search-apps', (query = '', refresh = false, options = {}) => appCatalog.searchApps(query, refresh, options && typeof options === 'object' ? { limit: options.limit ?? 30, icons: options.icons ?? true } : {}));
   handle('orbit:get-app-icon', target => appCatalog.getAppIcon(target));
   handle('orbit:minimize', () => mainWindow.minimize());
   handle('orbit:maximize', () => mainWindow.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize());

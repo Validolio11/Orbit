@@ -32,9 +32,10 @@ const fs = require('node:fs/promises');
     const add=async(kind,name,target)=>{
       await page.locator('.panel-head [data-command="add-action"]').click();
       await dialog().locator(`[data-kind="${kind}"]`).click();
+      // While adding a program its name is edited under "Додатково".
+      if(kind==='app')await dialog().locator('.app-advanced>summary').click();
       if(kind!=='system')await dialog().locator('#action-name').fill(name);
       else assert.equal(await dialog().locator('#action-name').count(),0,'Windows commands take the tile name');
-      if(kind==='app')await dialog().locator('.app-advanced>summary').click();
       if(kind==='system')await dialog().locator(`[data-system="${target}"]`).click();
       else if(kind!=='group')await dialog().locator('#action-target').fill(target);
       await modalButton('Додати дію').click();await waitSave();

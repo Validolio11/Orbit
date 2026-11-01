@@ -25,7 +25,7 @@ contextBridge.exposeInMainWorld('orbit', Object.freeze({
   addWheelAction: groupPath => ipcRenderer.invoke('orbit:add-wheel-action', groupPath),
   openAddDialog: groupPath => ipcRenderer.invoke('orbit:open-add-dialog', groupPath),
   onWheelForeground: callback => subscribe('orbit:wheel-foreground', callback),
-  searchApps: (query = '', refresh = false) => ipcRenderer.invoke('orbit:search-apps', query, refresh),
+  searchApps: (query = '', refresh = false, options = {}) => ipcRenderer.invoke('orbit:search-apps', query, refresh, options),
   getAppIcon: target => ipcRenderer.invoke('orbit:get-app-icon', target),
   minimize: () => ipcRenderer.invoke('orbit:minimize'),
   maximize: () => ipcRenderer.invoke('orbit:maximize'),

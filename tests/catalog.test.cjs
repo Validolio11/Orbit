@@ -71,8 +71,11 @@ test('invalid discovery entries and nonlocal icon targets are ignored', async ()
   ]).length, 0);
   let icons = 0;
   const catalog = createAppCatalog({ discover: async () => [], loadIcon: async () => { icons++; return icon; } });
-  for (const target of ['app.exe', 'https://example.com', 'app-id:Family!App', '\\\\server\\app.exe']) assert.equal(await catalog.getAppIcon(target), null);
+  for (const target of ['app.exe', 'https://example.com', 'app-id:../x!y', '\\\\server\\app.exe']) assert.equal(await catalog.getAppIcon(target), null);
   assert.equal(icons, 0);
+  // Store apps have no file, but a valid family!app ID still gets its Shell icon.
+  assert.equal(await catalog.getAppIcon('app-id:Family!App'), icon);
+  assert.equal(icons, 1);
   catalog.dispose();
 });
 
@@ -144,6 +147,25 @@ test('cached apps are returned while background refresh is pending', async () =>
     await catalog.searchApps('', true);
     assert.equal((await catalog.searchApps('new')).total, 1);
   } finally { catalog.dispose(); await fsp.unlink(file).catch(() => {}); await fsp.unlink(file + '.tmp').catch(() => {}); await fsp.rmdir(directory); }
+});
+
+test('uninstall shortcuts are left out and the grid can ask for more programs without icons', async () => {
+  const index = normalizeCatalog([
+    app('Telegram Desktop', 'C:\\Apps\\Telegram.exe'),
+    app('Видалити Telegram', 'C:\\Start Menu\\Видалити Telegram.lnk'),
+    app('Видалення файлів', 'C:\\Apps\\Shredder.exe'),
+    app('Uninstall Zoom', 'C:\\Start Menu\\Uninstall Zoom.lnk'),
+    app('Notepad++ cleanup', 'C:\\Apps\\Notepad++\\unins000.exe'),
+    app('Revo Uninstaller Pro', 'C:\\Apps\\Revo\\RevoUninPro.exe'),
+  ]);
+  assert.deepEqual(index.map(entry => entry.name).sort(), ['Revo Uninstaller Pro', 'Telegram Desktop', 'Видалення файлів']);
+  let icons = 0;
+  const rows = Array.from({ length: 70 }, (_, index) => app(`Tool ${index}`, `C:\\Apps\\Tool${index}.exe`));
+  const catalog = createAppCatalog({ discover: async () => rows, loadIcon: async () => { icons++; return icon; } });
+  const grid = await catalog.searchApps('', false, { limit: 60, icons: false });
+  assert.equal(grid.apps.length, 60); assert.equal(icons, 0); assert.equal(grid.apps[0].icon, undefined);
+  assert.equal((await catalog.searchApps('', false, { limit: 500 })).error, 'Неправильний пошуковий запит.');
+  catalog.dispose();
 });
 
 test('catalog finds the shortcut behind a running executable and popular apps by name', async () => {

@@ -21,18 +21,18 @@ const path=require('node:path');
     const closeDialog=()=>dialog().getByRole('button',{name:'Скасувати',exact:true}).click();
     const waitClosed=()=>page.waitForSelector('#modal-root:empty',{state:'attached'});
     await add();
-    assert.equal(await page.getByLabel('Знайти застосунок',{exact:true}).evaluate(el=>el===document.activeElement),true);
-    await page.getByLabel('Знайти застосунок',{exact:true}).fill(candidate.name);
+    assert.equal(await page.getByLabel('Виберіть програму',{exact:true}).evaluate(el=>el===document.activeElement),true);
+    await page.getByLabel('Виберіть програму',{exact:true}).fill(candidate.name);
     await page.locator('.app-result-copy strong').filter({hasText:candidate.name}).first().waitFor();
-    await page.getByLabel('Знайти застосунок',{exact:true}).press('ArrowDown');
-    await page.getByLabel('Знайти застосунок',{exact:true}).press('Enter');
+    await page.getByLabel('Виберіть програму',{exact:true}).press('ArrowDown');
+    await page.getByLabel('Виберіть програму',{exact:true}).press('Enter');
     // Picking a result adds the action at once.
     await waitClosed();
     let saved=await page.evaluate(()=>window.orbit.getState());
     const before=saved.menus[0].items.length,quick=saved.menus[0].items.at(-1);
     assert.equal(quick.name,candidate.name);assert.equal(quick.target,candidate.target);
     // Ticked results are added together by the footer button.
-    await add();await page.getByLabel('Знайти застосунок',{exact:true}).fill(candidate.name);
+    await add();await page.getByLabel('Виберіть програму',{exact:true}).fill(candidate.name);
     await page.locator('.app-result-copy strong').filter({hasText:candidate.name}).first().waitFor();
     await page.locator('.app-result-check').first().click();
     assert.equal(await dialog().count(),1,'Ticking a result must keep the dialog open');
@@ -42,11 +42,12 @@ const path=require('node:path');
     saved.menus[0].items=saved.menus[0].items.slice(0,before-1);await page.evaluate(next=>window.orbit.saveState(next),saved);
     await page.waitForFunction(count=>document.querySelectorAll('.action-list .action-row').length===count,before-1);
     // With the advanced fields open, picking fills the form so the name can still be edited.
-    await add();await page.getByLabel('Знайти застосунок',{exact:true}).press('Escape');await dialog().locator('.app-advanced>summary').click();
-    await page.getByLabel('Знайти застосунок',{exact:true}).fill(candidate.name);
+    await add();await dialog().locator('.app-advanced>summary').click();
+    await page.getByLabel('Виберіть програму',{exact:true}).fill(candidate.name);
     await page.locator('.app-result-copy strong').filter({hasText:candidate.name}).first().waitFor();
-    await page.getByLabel('Знайти застосунок',{exact:true}).press('ArrowDown');
-    await page.getByLabel('Знайти застосунок',{exact:true}).press('Enter');
+    await page.getByLabel('Виберіть програму',{exact:true}).press('ArrowDown');
+    await page.getByLabel('Виберіть програму',{exact:true}).press('Enter');
+    await page.waitForFunction(name=>document.querySelector('#action-name')?.value===name,candidate.name);
     assert.equal(await dialog().count(),1,'With advanced fields open, choosing must not submit');
     assert.equal(await page.getByLabel('Назва в колесі').inputValue(),candidate.name);
     assert.equal(await page.locator('#action-target').inputValue(),candidate.target);
@@ -59,7 +60,7 @@ const path=require('node:path');
     await page.locator('.action-row').filter({hasText:'QA обрана програма'}).waitFor();
     console.log('PASS: actual installed-app search, autofocus, one-step add, multi-select, advanced edit, alias and persistence');
 
-    await add();await page.getByLabel('Знайти застосунок',{exact:true}).fill('no-such-orbit-app-zzzz-12345');
+    await add();await page.getByLabel('Виберіть програму',{exact:true}).fill('no-such-orbit-app-zzzz-12345');
     await page.getByText('Нічого не знайдено. Спробуйте іншу назву або оберіть файл.',{exact:true}).waitFor();
     await page.keyboard.press('Escape');assert.equal(await dialog().count(),1);
     await dialog().locator('[data-app-mode="url"]').click();
@@ -67,13 +68,14 @@ const path=require('node:path');
     await page.getByLabel('Назва в колесі').fill('QA посилання');
     await dialog().getByRole('button',{name:'Додати дію',exact:true}).click();await waitClosed();
     saved=await page.evaluate(()=>window.orbit.getState());assert.equal(saved.menus[0].items.find(i=>i.name==='QA посилання').target,'https://example.com');
-    console.log('PASS: empty search, Escape preserves dialog, URL fallback');
+    console.log('PASS: empty search, Escape clears the query and keeps the dialog, URL fallback');
 
     await app.evaluate(({dialog})=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:['C:\\QA\\Portable.exe']});});
     await add();await dialog().getByRole('button',{name:'Обрати файл…',exact:true}).click();
-    await page.locator('#selected-app').filter({hasText:'Portable'}).waitFor();
-    assert.equal(await page.locator('#action-target').inputValue(),'C:\\QA\\Portable.exe');
-    await closeDialog();await waitClosed();
+    // A chosen file is added at once, like a program picked in the grid.
+    await waitClosed();
+    const portable=(await page.evaluate(()=>window.orbit.getState())).menus[0].items.at(-1);
+    assert.equal(portable.target,'C:\\QA\\Portable.exe');assert.equal(portable.name,'Portable');
     const count=await page.locator('.action-list .action-row').count();
     await page.getByRole('button',{name:'Видалити дію QA обрана програма',exact:true}).click();await closeDialog();
     assert.equal(await page.locator('.action-list .action-row').count(),count);
@@ -81,7 +83,7 @@ const path=require('node:path');
     assert.equal(await page.locator('.action-list .action-row').count(),count-1);
     assert.equal(await page.locator('#preview-wheel [data-wheel-id="'+action.id+'"]').count(),0);
     assert.deepEqual(errors,[]);
-    console.log('PASS: file picker fallback, per-action trash/cancel/delete, wheel update; no renderer errors');
+    console.log('PASS: file picker adds at once, per-action trash/cancel/delete, wheel update; no renderer errors');
     console.log('ORBIT_APP_SEARCH_OK');
   }finally{await app.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

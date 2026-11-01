@@ -11,6 +11,10 @@ function normalizeQuery(value) {
   return String(value ?? '').normalize('NFKC').toLocaleLowerCase('uk-UA').trim().replace(/\s+/g, ' ');
 }
 
+function isPackagedTarget(target) {
+  try { validatePackagedTarget(target); return true; } catch { return false; }
+}
+
 function validatePackagedTarget(target, args = '') {
   if (typeof target !== 'string' || !target.startsWith('app-id:')) throw new Error('Неправильний ідентифікатор застосунку Windows.');
   const appId = target.slice(7);
@@ -27,6 +31,13 @@ function targetKey(target) {
   return /^app-id:/i.test(target) ? target.toLowerCase() : path.win32.normalize(target).toLowerCase();
 }
 
+// Start menu uninstall shortcuts ("Видалити Telegram", "Uninstall Zoom") are noise in a launcher.
+function isUninstaller(name, ...targets) {
+  // \b only knows ASCII word characters, so the end of the word is matched explicitly for Cyrillic.
+  if (/^(uninstall|видалити|удалить|деінсталювати|деинсталлировать)(?=\s|$)/iu.test(name.trim())) return true;
+  return targets.some(target => typeof target === 'string' && /(^|[\\/])(unins\d*|uninstall[^\\/]*)\.exe$/i.test(target));
+}
+
 function normalizeCatalog(rows) {
   if (!Array.isArray(rows)) throw new Error('Invalid app discovery result.');
   const unique = new Map();
@@ -35,7 +46,7 @@ function normalizeCatalog(rows) {
     const name = row.name.replace(/[\0\r\n]/g, ' ').trim().slice(0, 100);
     const target = row.target.trim();
     const args = typeof row.args === 'string' && row.args.length <= 4096 && !row.args.includes('\0') ? row.args : '';
-    if (!name) continue;
+    if (!name || isUninstaller(name, row.target, row.resolvedTarget)) continue;
     if (/^app-id:/i.test(target)) { try { validatePackagedTarget(target, args); } catch { continue; } }
     else if (!isLocalAppPath(target)) continue;
     const resolvedTarget = isLocalAppPath(row.resolvedTarget) ? row.resolvedTarget : target;
@@ -144,7 +155,7 @@ function createAppCatalog({ discover = discoverWindowsApps, loadIcon = async () 
     return pending;
   }
   async function getAppIcon(target) {
-    if (disposed || !isLocalAppPath(target)) return null;
+    if (disposed || !(isLocalAppPath(target) || isPackagedTarget(target))) return null;
     const key = targetKey(target);
     if (!icons.has(key)) {
       if (icons.size >= 300) icons.delete(icons.keys().next().value);
@@ -154,12 +165,13 @@ function createAppCatalog({ discover = discoverWindowsApps, loadIcon = async () 
   }
   return {
     warm: () => ensureIndex(),
-    async searchApps(query = '', refresh = false) {
-      if (typeof query !== 'string' || query.length > 200 || typeof refresh !== 'boolean') return { apps: [], total: 0, error: 'Неправильний пошуковий запит.' };
+    // The add dialog's grid asks for more programs without icons and loads each icon as its tile appears.
+    async searchApps(query = '', refresh = false, { limit = 30, icons = true } = {}) {
+      if (typeof query !== 'string' || query.length > 200 || typeof refresh !== 'boolean' || !Number.isInteger(limit) || limit < 1 || limit > 120 || typeof icons !== 'boolean') return { apps: [], total: 0, error: 'Неправильний пошуковий запит.' };
       await ensureIndex(refresh);
-      const result = searchCatalog(entries || [], query);
+      const result = searchCatalog(entries || [], query, limit);
       // Icons are requested only for visible search results, never for the whole index.
-      for (let offset = 0; offset < result.apps.length; offset += 6) {
+      for (let offset = 0; icons && offset < result.apps.length; offset += 6) {
         await Promise.all(result.apps.slice(offset, offset + 6).map(async entry => { const icon = await getAppIcon(entry.target); if (icon) entry.icon = icon; }));
       }
       return error ? { ...result, error } : result;

@@ -179,9 +179,14 @@ internal static class MouseHook
     {
         // This mode never installs an input hook or starts the selected application.
         // ICONONLY | BIGGERSIZEOK requests the actual Shell icon without SCALEUP.
-        if (string.IsNullOrWhiteSpace(file) || file.Length > 4096 || file.IndexOf('\0') >= 0 || file.Length < 3 || file[1] != ':' || (file[2] != '\\' && file[2] != '/') || !File.Exists(file)) return 2;
-        string extension = Path.GetExtension(file);
-        if (!extension.Equals(".exe", StringComparison.OrdinalIgnoreCase) && !extension.Equals(".lnk", StringComparison.OrdinalIgnoreCase)) return 2;
+        // Store apps have no file on disk; their Shell item is shell:AppsFolder\<family!app>.
+        bool packaged = file != null && file.StartsWith(@"shell:AppsFolder\", StringComparison.Ordinal) && System.Text.RegularExpressions.Regex.IsMatch(file.Substring(17), @"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}![A-Za-z0-9][A-Za-z0-9._-]{0,63}$");
+        if (!packaged)
+        {
+            if (string.IsNullOrWhiteSpace(file) || file.Length > 4096 || file.IndexOf('\0') >= 0 || file.Length < 3 || file[1] != ':' || (file[2] != '\\' && file[2] != '/') || !File.Exists(file)) return 2;
+            string extension = Path.GetExtension(file);
+            if (!extension.Equals(".exe", StringComparison.OrdinalIgnoreCase) && !extension.Equals(".lnk", StringComparison.OrdinalIgnoreCase)) return 2;
+        }
         IShellItemImageFactory factory = null;
         IntPtr bitmap = IntPtr.Zero, dc = IntPtr.Zero;
         try
