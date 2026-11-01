@@ -48,13 +48,20 @@ const paths = {
   info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10h.01"/>',
   external:'<path d="M14 3h7v7m0-7L10 14M10 3H3v18h18v-7"/>',
   pause:'<path d="M8 5v14m8-14v14"/>',
+  volumeMute:'<path d="M11 4 6 8H3v8h3l5 4zM16 9l5 6m0-6-5 6"/>',
+  volumeUp:'<path d="M11 4 6 8H3v8h3l5 4zM15 12h6m-3-3v6"/>',
+  volumeDown:'<path d="M11 4 6 8H3v8h3l5 4zM15 12h6"/>',
+  desktop:'<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8m-4-4v4M7 13h4"/>',
+  lock:'<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+  playPause:'<path d="m3 6 8 6-8 6zM16 6v12m4-12v12"/>',
 };
+export const systemIcons={explorer:'folder','task-manager':'tasks',screenshot:'screenshot',mute:'volumeMute','volume-up':'volumeUp','volume-down':'volumeDown',desktop:'desktop',settings:'settings',lock:'lock','media-play':'playPause'};
 export function icon(name,size=20){return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name]||paths.app}</svg>`;}
 function fallbackItemIcon(item,size=22){
   const n = (item.name||'').toLowerCase();
   const adobe = n.includes('illustrator')?['Ai','ai']:n.includes('after effects')?['Ae','ae']:n.includes('photoshop')?['Ps','ps']:n==='adobe'?['A','adobe']:null;
   if(adobe)return `<span class="adobe-icon ${adobe[1]}" style="--icon-size:${size}px">${adobe[0]}</span>`;
-  const guessed = item.target==='explorer'?'folder':item.target==='task-manager'?'tasks':item.target==='screenshot'?'screenshot':/mute|volume/.test(item.target)?'volume':item.target==='settings'?'settings':/browser/i.test(item.icon)||/браузер|browser|chrome|edge|вебпошук/.test(n)?'browser':item.kind;
+  const guessed = item.kind==='system'&&systemIcons[item.target]?systemIcons[item.target]:/browser/i.test(item.icon)||/браузер|browser|chrome|edge|вебпошук/.test(n)?'browser':item.kind;
   const aliases={globe:'browser',files:'folder',activity:'tasks'};
   return icon(paths[item.icon]?item.icon:aliases[item.icon]||guessed,size);
 }
