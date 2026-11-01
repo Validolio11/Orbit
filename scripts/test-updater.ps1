@@ -162,6 +162,7 @@ class Fixture {
     Assert (Test-Path -LiteralPath (Join-Path $rollback.install 'old.txt')) 'Rollback did not restore old app.'
     Assert (-not (Test-Path -LiteralPath (Join-Path $rollback.install 'new.txt'))) 'Broken new app was retained at live path.'
     Assert ((Get-Content -LiteralPath (Join-Path $rollback.work 'result.json') -Raw | ConvertFrom-Json).rolledBack -eq $true) 'Rollback result missing.'
+    Wait-File (Join-Path $rollback.install 'launched.txt') $null
     Assert ((File-Hash $settings) -eq $settingsHash) 'User settings changed.'
     Write-Output 'PASS: failed startup rolls back and leaves user settings unchanged'
     Write-Output 'ORBIT_UPDATER_TRANSACTIONS_OK'
