@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 const subscribe = (channel, callback) => {
   if (typeof callback !== 'function') throw new TypeError('A callback is required.');
@@ -20,6 +20,8 @@ contextBridge.exposeInMainWorld('orbit', Object.freeze({
   closeWheel: () => ipcRenderer.invoke('orbit:close-wheel'),
   executeAction: action => ipcRenderer.invoke('orbit:execute-action', action),
   pickTarget: kind => ipcRenderer.invoke('orbit:pick-target', kind),
+  pathForFile: file => webUtils.getPathForFile(file),
+  inspectDropped: paths => ipcRenderer.invoke('orbit:inspect-dropped', paths),
   searchApps: (query = '', refresh = false) => ipcRenderer.invoke('orbit:search-apps', query, refresh),
   getAppIcon: target => ipcRenderer.invoke('orbit:get-app-icon', target),
   minimize: () => ipcRenderer.invoke('orbit:minimize'),

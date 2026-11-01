@@ -11,13 +11,21 @@ export function appPickerFields(draft,config){
     ${!urlMode?`<details class="app-advanced" ${config.detailsOpen?'open':''}><summary>${icon('chevron',13)}Додатково</summary><div class="field"><label for="action-target">Програма, ярлик або URL</label><input id="action-target" name="target" value="${e(draft.target)}" placeholder="C:\\Program Files\\…\\App.exe" autocomplete="off"></div><div class="field"><label for="action-args">Аргументи <span class="optional-label">· необов’язково</span></label><input id="action-args" name="args" value="${e(draft.args)}" placeholder='Наприклад, "C:\\Projects\\scene.aep"' ${draft.target.startsWith('app-id:')?'disabled':''}><small>${draft.target.startsWith('app-id:')?'Цей застосунок запускається без додаткових аргументів.':'Для .exe можна вказати аргументи. Аргументи ярлика налаштовуються у його властивостях.'}</small></div></details>`:''}`;
 }
 
-export function mountAppPicker({form,draft,config,onChoose,onModeChange}){
+export function mountAppPicker({form,draft,config,onChoose,onModeChange,onPickedChange=()=>{}}){
   const controller=new AbortController(),{signal}=controller;
   const api=window.orbit,input=form.querySelector('#app-search'),panel=form.querySelector('#app-results');
   let generation=0,timer,results=[],active=-1,disposed=false,displayedQuery='';
   const close=()=>{clearTimeout(timer);timer=null;generation++;if(panel?.matches(':popover-open'))panel.hidePopover();input?.setAttribute('aria-expanded','false');input?.removeAttribute('aria-activedescendant');};
   const show=()=>{if(!panel?.isConnected||disposed)return;if(!panel.matches(':popover-open'))panel.showPopover();input.setAttribute('aria-expanded','true');};
   const choose=index=>{const entry=results[index];if(!entry||displayedQuery!==input.value.trim())return;rememberAppIcon(entry.target,entry.icon);close();onChoose(entry);};
+  // Ticked programs survive new searches and are added together by the dialog's main button.
+  const toggle=index=>{
+    const entry=results[index];if(!entry||!config.picked)return;
+    if(config.picked.has(entry.target))config.picked.delete(entry.target);else config.picked.set(entry.target,entry);
+    const node=panel.querySelector(`#app-result-${index}`);node?.classList.toggle('picked',config.picked.has(entry.target));node?.setAttribute('aria-checked',String(config.picked.has(entry.target)));
+    onPickedChange(config.picked.size);
+  };
+  const activate=(index,event)=>config.picked&&(config.picked.size||event?.ctrlKey||event?.target?.closest?.('.app-result-check'))?toggle(index):choose(index);
   const highlight=index=>{if(!results.length)return;active=(index+results.length)%results.length;panel.querySelectorAll('[role="option"]').forEach((node,i)=>node.setAttribute('aria-selected',String(i===active)));input.setAttribute('aria-activedescendant',`app-result-${active}`);panel.querySelector(`#app-result-${active}`)?.scrollIntoView({block:'nearest'});};
   async function search(refresh=false){
     if(!input?.isConnected||disposed)return;
@@ -28,7 +36,8 @@ export function mountAppPicker({form,draft,config,onChoose,onModeChange}){
       if(request!==generation||!input.isConnected||disposed)return;
       results=response.apps||[];active=-1;displayedQuery=query;
       for(const entry of results)rememberAppIcon(entry.target,entry.icon);
-      panel.innerHTML=results.length?`<div class="app-results-label">${query?'Результати пошуку':'Встановлені застосунки'}</div>${results.map((entry,i)=>`<button type="button" class="app-result" role="option" tabindex="-1" id="app-result-${i}" data-result="${i}" aria-selected="false"><span class="app-result-icon">${itemIcon({kind:'app',name:entry.name,target:entry.target,icon:'app'},26)}</span><span class="app-result-copy"><strong>${e(entry.name)}</strong><small title="${e(entry.target)}">${e(entry.target.startsWith('app-id:')?'Застосунок Windows':entry.target)}</small></span></button>`).join('')}`:`<div class="app-search-status" role="status">${response.error?'Не вдалося отримати список програм. Скористайтеся кнопкою «Обрати файл…».':query?'Нічого не знайдено. Спробуйте іншу назву або оберіть файл.':'Програм не знайдено. Оберіть файл або оновіть список.'}</div>`;
+      const picked=entry=>config.picked?.has(entry.target);
+      panel.innerHTML=results.length?`<div class="app-results-label">${query?'Результати пошуку':'Встановлені застосунки'}${config.picked?' · позначте кілька, щоб додати разом':''}</div>${results.map((entry,i)=>`<button type="button" class="app-result ${picked(entry)?'picked':''}" role="option" tabindex="-1" id="app-result-${i}" data-result="${i}" aria-selected="false" ${config.picked?`aria-checked="${!!picked(entry)}"`:''}><span class="app-result-icon">${itemIcon({kind:'app',name:entry.name,target:entry.target,icon:'app'},26)}</span><span class="app-result-copy"><strong>${e(entry.name)}</strong><small title="${e(entry.target)}">${e(entry.target.startsWith('app-id:')?'Застосунок Windows':entry.target)}</small></span>${config.picked?`<span class="app-result-check" title="Позначити">${icon('check',13)}</span>`:''}</button>`).join('')}`:`<div class="app-search-status" role="status">${response.error?'Не вдалося отримати список програм. Скористайтеся кнопкою «Обрати файл…».':query?'Нічого не знайдено. Спробуйте іншу назву або оберіть файл.':'Програм не знайдено. Оберіть файл або оновіть список.'}</div>`;
       show();hydrateAppIcons(panel);
     }catch{
       if(request===generation&&input.isConnected&&!disposed){results=[];panel.innerHTML='<div class="app-search-status" role="status">Пошук недоступний. Оберіть файл або натисніть «Оновити список».</div>';show();}
@@ -48,12 +57,12 @@ export function mountAppPicker({form,draft,config,onChoose,onModeChange}){
         event.preventDefault();event.stopPropagation();
         if(!open){search();return;}
         highlight(active<0?(event.key==='ArrowDown'?0:results.length-1):active+(event.key==='ArrowDown'?1:-1));
-      }else if(event.key==='Enter'&&open){event.preventDefault();event.stopPropagation();choose(active<0?0:active);}
+      }else if(event.key==='Enter'&&open){event.preventDefault();event.stopPropagation();activate(active<0?0:active,event);}
       else if(event.key==='Escape'&&open){event.preventDefault();event.stopPropagation();generation++;close();}
       else if(event.key==='Tab'){generation++;close();}
     },{signal});
     panel.addEventListener('pointerdown',event=>{if(event.target.closest('[data-result]'))event.preventDefault();},{signal});
-    panel.addEventListener('click',event=>{const button=event.target.closest('[data-result]');if(button)choose(Number(button.dataset.result));},{signal});
+    panel.addEventListener('click',event=>{const button=event.target.closest('[data-result]');if(button)activate(Number(button.dataset.result),event);},{signal});
     form.querySelector('#refresh-apps').addEventListener('click',()=>{input.focus();search(true);},{signal});
     document.addEventListener('pointerdown',event=>{if(!event.target.closest('.app-search-field')){generation++;close();}},{capture:true,signal});
   }

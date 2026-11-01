@@ -24,6 +24,7 @@ let updateStatus={phase:'idle',currentVersion:'0.1.1'};
 let page='menus',selectedId='adobe',groupPath=[],search='',toastTimer,modalPreviousFocus,modalCleanup;
 let wheelStack=[],wheelSelected=-1,wheelTrigger='preview',wheelTimer,groupTimer,wheelBusy=false,wheelOpen=false,mousePoint=null,transitionOrigin=null;
 const uuid=()=>crypto.randomUUID();
+const actionsWord=count=>count%10===1&&count%100!==11?'дію':[2,3,4].includes(count%10)&&![12,13,14].includes(count%100)?'дії':'дій';
 const currentMenu=()=>state.menus.find(m=>m.id===state.activeMenuId)||state.menus[0];
 function currentGroup(){let value={items:currentMenu().items,name:currentMenu().name};for(const id of groupPath){const item=value.items.find(i=>i.id===id);if(!item||item.kind!=='group')break;value={...item,items:item.children};}return value;}
 function locate(id){for(const menu of state.menus){const walk=(items,path=[])=>{for(let i=0;i<items.length;i++){if(items[i].id===id)return {item:items[i],items,index:i,menu,path};if(items[i].kind==='group'){const found=walk(items[i].children,[...path,items[i].id]);if(found)return found;}}};const found=walk(menu.items);if(found)return found;}return null;}
@@ -80,7 +81,7 @@ function render(){
   </div>`;
   if(page==='menus'){
     const group=currentGroup();
-    renderWheel(document.querySelector('#preview-wheel'),group.items,{title:groupPath.length?group.name:'Orbit',selected:selectedId,back:!!groupPath.length});
+    renderWheel(document.querySelector('#preview-wheel'),group.items,{title:groupPath.length?group.name:'Orbit',selected:selectedId,back:!!groupPath.length,addSlot:group.items.length<12});
   }
   hydrateAppIcons(root);
   root.querySelectorAll('.action-list [draggable="true"] img').forEach(image=>image.draggable=false);
@@ -93,7 +94,7 @@ function menusPage(){
     <div class="menu-editor"><section class="panel preview-panel"><div class="panel-head"><h2>Попередній перегляд</h2><span class="micro-label">${group.items.length} / 12</span></div><div class="preview-surface">${groupPath.length?`<button class="btn small preview-back" data-command="group-back">${icon('back',13)}Назад</button>`:''}<div class="wheel-mount" id="preview-wheel"></div><span class="preview-label">${groupPath.length?e(group.name.toUpperCase()):'ORBIT / RADIAL MENU'}</span></div><div class="preview-bottom">${icon('info',15)}<span>Перетягніть сектор, щоб змінити порядок. Центр переносить дію на рівень вище.</span></div></section>
     <section class="panel"><div class="panel-head"><h2>${groupPath.length?e(group.name):'Дії в меню'}</h2><button class="btn small ghost" data-command="add-action" ${group.items.length>=12?'disabled':''}>${icon('plus',13)}Додати</button></div><div class="action-list">${group.items.length?group.items.map((item,i)=>actionRow(item,i)).join(''):`<div class="empty-state">${icon('plus',26)}<strong>Поки що порожньо</strong><p>Додайте програму, папку або команду до цього колеса.</p><button class="btn" data-command="add-action">Додати дію</button></div>`}</div><div class="list-footer"><span>${groupPath.length?'Вкладене меню':'Перетягніть дію на групу, щоб перемістити'}</span><span>${group.items.length} / 12</span></div></section></div>
     <div class="quick-settings"><button class="quick-setting" data-page="controls">${icon('mouse',22)}<span class="setting-copy"><strong>Бічна кнопка ${state.triggerButton}</strong><small>Виклик колеса · Ctrl + Space</small></span>${icon('chevron',14)}</button><button class="quick-setting" data-page="controls">${icon(state.activationMode==='hover'?'mouse':'play',21)}<span class="setting-copy"><strong>${activationNames[state.activationMode]}</strong><small>${state.activationMode==='hover'?`Затримка ${state.hoverDelay} мс`:'Спосіб запуску обраної дії'}</small></span>${icon('chevron',14)}</button></div>
-    <div class="page-foot"><span>${icon('check',12)}Зміни зберігаються автоматично</span>${statusMarkup()}</div>`;
+    <div class="page-foot"><span>${icon('check',12)}Зміни зберігаються автоматично</span></div>`;
 }
 function actionDescription(item){if(item.kind==='group')return `${item.children.length} ${item.children.length===1?'дія':'дій'} у вкладеному меню`;if(item.kind==='system')return systemNames[item.target]||'Системна команда';return item.target||'Виберіть шлях до застосунку';}
 function actionRow(item,index,library=false,context=''){
@@ -104,7 +105,7 @@ function libraryPage(){
   return `<div class="page-header"><div><h1>Усі дії</h1><p>Знайдіть і налаштуйте дію в будь-якому меню.</p></div><button class="btn primary" data-command="add-action">${icon('plus',15)}Додати дію</button></div><div class="library-toolbar"><label class="search-box">${icon('search',16)}<input id="action-search" placeholder="Знайти дію…" aria-label="Знайти дію" value="${e(search)}"></label><span class="micro-label" aria-live="polite">${entries.length} дій</span></div><section class="panel library-list">${entries.length?entries.map(({item,path,menu},i)=>actionRow(item,i,true,[menu.name,...path].join(' / '))).join(''):'<div class="empty-state"><strong>Дій не знайдено</strong><p>Спробуйте іншу назву.</p></div>'}</section>`;
 }
 function controlsPage(){
-  return `<div class="page-header"><div><h1>Керування</h1><p>Налаштуйте мишу та спосіб вибору дій.</p></div>${statusMarkup()}</div><div class="settings-stack">
+  return `<div class="page-header"><div><h1>Керування</h1><p>Налаштуйте мишу та спосіб вибору дій.</p></div></div><div class="settings-stack">
     <section class="settings-section"><div class="mouse-visual"><div class="mouse-diagram" aria-hidden="true"><span class="mouse-side first ${state.triggerButton===5?'inactive':''}"></span><span class="mouse-side second ${state.triggerButton===5?'active':''}"></span></div><div><h2>Ваша миша. Ваші команди.</h2><p>Стандартні бічні кнопки Mouse 4 та Mouse 5.</p>${statusMarkup()}</div></div>
     <div class="setting-row"><div class="setting-label"><strong>Orbit у фоновому режимі</strong><p>Коли ввімкнено, обрана бічна кнопка викликає колесо замість переходу назад або вперед.</p></div><button class="toggle ${state.enabled?'on':''}" data-toggle="enabled" role="switch" aria-checked="${state.enabled}" aria-label="Orbit у фоновому режимі"></button></div>
     <div class="setting-row"><div class="setting-label"><strong>Запускати разом з Windows</strong><p>Orbit стартує у фоні після входу в систему, тож бічна кнопка працює одразу.</p></div><button class="toggle ${state.launchAtLogin!==false?'on':''}" data-toggle="launchAtLogin" role="switch" aria-checked="${state.launchAtLogin!==false}" aria-label="Запускати разом з Windows"></button></div>
@@ -151,14 +152,16 @@ function deleteDialog(type,id){const item=type==='menu'?currentMenu():locate(id)
 function actionDialog(id){
   let existing=id?locate(id)?.item:null;
   let draft=existing?structuredClone(existing):{id:uuid(),name:'',kind:'app',target:'',args:'',icon:'',children:[]};
-  const pickerConfig={query:existing?.kind==='app'?existing.name:'',selectedName:existing?.kind==='app'?existing.name:'',mode:/^https?:\/\//i.test(draft.target)?'url':'search',detailsOpen:!!draft.args};
+  const pickerConfig={query:existing?.kind==='app'?existing.name:'',selectedName:existing?.kind==='app'?existing.name:'',mode:/^https?:\/\//i.test(draft.target)?'url':'search',detailsOpen:!!draft.args,picked:existing?null:new Map()};
+  let capture=()=>{};
+  const primaryLabel=()=>existing?'Зберегти':pickerConfig.picked?.size&&draft.kind==='app'?`Додати вибрані (${pickerConfig.picked.size})`:'Додати дію';
   const parentGroup=currentGroup();if(!existing&&parentGroup.items.length>=12){toast('У цьому колесі вже 12 дій. Створіть групу або інше меню.',true);return;}
   function draw(){
-    const targetField=draft.kind==='app'?appPickerFields(draft,pickerConfig):draft.kind==='group'?`<p class="field-note">Група відкриває вкладене колесо. Після збереження відкрийте її стрілкою у списку й додайте дії.</p>`:draft.kind==='system'?`<div class="field"><span class="field-title" id="system-title">Команда Windows</span><div class="kind-choices system-choices" role="group" aria-labelledby="system-title">${Object.entries(systemNames).map(([value,label])=>`<button class="kind-choice system-choice ${draft.target===value?'active':''}" data-system="${value}" type="button" aria-pressed="${draft.target===value}">${icon(systemIcons[value],19)}<span>${label}</span></button>`).join('')}</div></div>`:`<div class="field"><label for="action-target">${draft.kind==='folder'?'Шлях до папки':'Файл скрипту'}</label><div class="field-inline"><input id="action-target" name="target" value="${e(draft.target)}" placeholder="${draft.kind==='folder'?'C:\\Проєкти':'C:\\Scripts\\render.ps1'}" required><button class="btn" type="button" id="browse-target">Огляд…</button></div><small>${draft.kind==='script'?'Підтримуються .ps1, .py, .js та .cjs. Для Python потрібен встановлений Python Launcher.':'Відкриється у Провіднику Windows.'}</small></div>${draft.kind==='script'?`<div class="field"><label for="action-args">Аргументи <span style="color:var(--faint);font-weight:400">· необов’язково</span></label><input id="action-args" name="args" value="${e(draft.args)}" placeholder='Наприклад, "C:\\Projects\\scene.aep"'><small>Аргументи з пробілами беріть у подвійні лапки.</small></div>`:''}`;
+    const targetField=draft.kind==='app'?appPickerFields(draft,pickerConfig):draft.kind==='group'?`<p class="field-note">Група відкриває вкладене колесо. Після створення вона одразу відкриється, щоб ви додали в неї дії.</p>`:draft.kind==='system'?`<div class="field"><span class="field-title" id="system-title">Команда Windows</span><div class="kind-choices system-choices" role="group" aria-labelledby="system-title">${Object.entries(systemNames).map(([value,label])=>`<button class="kind-choice system-choice ${draft.target===value?'active':''}" data-system="${value}" type="button" aria-pressed="${draft.target===value}">${icon(systemIcons[value],19)}<span>${label}</span></button>`).join('')}</div></div>`:`<div class="field"><label for="action-target">${draft.kind==='folder'?'Шлях до папки':'Файл скрипту'}</label><div class="field-inline"><input id="action-target" name="target" value="${e(draft.target)}" placeholder="${draft.kind==='folder'?'C:\\Проєкти':'C:\\Scripts\\render.ps1'}" required><button class="btn" type="button" id="browse-target">Огляд…</button></div><small>${draft.kind==='script'?'Підтримуються .ps1, .py, .js та .cjs. Для Python потрібен встановлений Python Launcher.':'Відкриється у Провіднику Windows.'}</small></div>${draft.kind==='script'?`<div class="field"><label for="action-args">Аргументи <span style="color:var(--faint);font-weight:400">· необов’язково</span></label><input id="action-args" name="args" value="${e(draft.args)}" placeholder='Наприклад, "C:\\Projects\\scene.aep"'><small>Аргументи з пробілами беріть у подвійні лапки.</small></div>`:''}`;
     // Windows commands are named by the chosen tile, so they need no name field.
-    const fields=draft.kind==='app'||draft.kind==='system'?targetField:`<div class="field"><label for="action-name">Назва</label><input id="action-name" name="name" maxlength="100" value="${e(draft.name)}" placeholder="Наприклад, Illustrator" required></div>${targetField}`;
-    modal(existing?'Редагувати дію':'Додати дію',`<form class="modal-body" id="action-form"><div class="kind-choices" role="group" aria-label="Тип дії">${Object.entries(kinds).map(([kind,label])=>`<button class="kind-choice ${draft.kind===kind?'active':''}" data-kind="${kind}" type="button" aria-pressed="${draft.kind===kind}">${icon(kind,19)}${label}</button>`).join('')}</div>${fields}<p class="form-error" id="form-error" role="alert"></p></form>`,`${existing?`<button class="btn danger" type="button" id="delete-action">${icon('trash',14)}Видалити</button>`:''}<button class="btn" data-command="dismiss">Скасувати</button><button class="btn primary" type="submit" form="action-form">${existing?'Зберегти':'Додати дію'}</button>`,true);
-    const capture=()=>{
+    const fields=draft.kind==='app'||draft.kind==='system'?targetField:`<div class="field"><label for="action-name">Назва</label><input id="action-name" name="name" maxlength="100" value="${e(draft.name)}" placeholder="${{folder:'Наприклад, Проєкти',script:'Наприклад, Рендер сцени',group:'Наприклад, Монтаж'}[draft.kind]||''}" required></div>${targetField}`;
+    modal(existing?'Редагувати дію':'Додати дію',`<form class="modal-body" id="action-form"><div class="kind-choices" role="group" aria-label="Тип дії">${Object.entries(kinds).map(([kind,label])=>`<button class="kind-choice ${draft.kind===kind?'active':''}" data-kind="${kind}" type="button" aria-pressed="${draft.kind===kind}">${icon(kind,19)}${label}</button>`).join('')}</div>${fields}<p class="form-error" id="form-error" role="alert"></p></form>`,`${existing?`<button class="btn danger" type="button" id="delete-action">${icon('trash',14)}Видалити</button>`:''}<button class="btn" data-command="dismiss">Скасувати</button><button class="btn primary" type="submit" form="action-form">${primaryLabel()}</button>`,true);
+    capture=()=>{
       const form=new FormData(document.querySelector('#action-form'));
       if(draft.kind==='system'){draft.name=existing?.kind==='system'&&existing.target===draft.target?existing.name:systemNames[draft.target];draft.args='';return;}
       draft.name=String(form.get('name')||'').trim();draft.target=draft.kind==='group'?'':String(form.get('target')||'').trim();draft.args=String(form.get('args')||'');
@@ -166,22 +169,60 @@ function actionDialog(id){
     if(draft.kind==='app')modalCleanup=mountAppPicker({form:document.querySelector('#action-form'),draft,config:pickerConfig,onChoose:entry=>{
       capture();if(!draft.name||draft.name===pickerConfig.selectedName)draft.name=entry.name;
       draft.target=entry.target;draft.args=entry.args||'';draft.icon='app';pickerConfig.mode='search';pickerConfig.selectedName=entry.name;pickerConfig.query=entry.name;
-      rememberAppIcon(entry.target,entry.icon);draw();queueMicrotask(()=>document.querySelector('#action-name')?.focus());
-    },onModeChange:mode=>{capture();pickerConfig.mode=mode;pickerConfig.query='';pickerConfig.selectedName='';draft.target='';draft.args='';draw();queueMicrotask(()=>document.querySelector(mode==='url'?'#action-target':'#app-search')?.focus());}});
+      rememberAppIcon(entry.target,entry.icon);draw();
+      // Picking a program finishes the action unless the user opened the advanced fields to add arguments.
+      if(!pickerConfig.detailsOpen)submit();else queueMicrotask(()=>document.querySelector('#action-name')?.focus());
+    },onPickedChange:()=>{const button=document.querySelector('.modal-footer .primary');if(button)button.textContent=primaryLabel();},onModeChange:mode=>{capture();pickerConfig.mode=mode;pickerConfig.query='';pickerConfig.selectedName='';draft.target='';draft.args='';draw();queueMicrotask(()=>document.querySelector(mode==='url'?'#action-target':'#app-search')?.focus());}});
     document.querySelectorAll('[data-kind]').forEach(button=>button.onclick=()=>{capture();const nextKind=button.dataset.kind;if(existing?.kind==='group'&&draft.children.length&&nextKind!=='group'){document.querySelector('#form-error').textContent='Спочатку видаліть або перенесіть дії з групи.';return;}if(draft.kind!==nextKind){draft.kind=nextKind;draft.target=nextKind==='system'?'explorer':'';draft.icon='';}draw();});
     document.querySelectorAll('[data-system]').forEach(button=>button.onclick=()=>{
       draft.target=button.dataset.system;
       document.querySelectorAll('[data-system]').forEach(other=>{const active=other===button;other.classList.toggle('active',active);other.setAttribute('aria-pressed',String(active));});
     });
+    document.querySelectorAll('[data-system]').forEach(button=>button.ondblclick=()=>{draft.target=button.dataset.system;submit();});
     document.querySelector('#browse-target')?.addEventListener('click',async()=>{capture();try{const value=await api.pickTarget(draft.kind);if(value){draft.target=value;const name=value.split(/[\\/]/).pop().replace(/\.[^.]+$/,'');if(!draft.name||draft.name===pickerConfig.selectedName)draft.name=name;if(draft.kind==='app'){pickerConfig.mode='search';pickerConfig.selectedName=name;pickerConfig.query=name;draw();}else{document.querySelector('#action-target').value=value;document.querySelector('#action-name').value=draft.name;}}}catch(error){document.querySelector('#form-error').textContent=error.message;}});
     document.querySelector('#delete-action')?.addEventListener('click',()=>deleteDialog('action',draft.id));
-    document.querySelector('#action-form').onsubmit=async event=>{event.preventDefault();capture();if(draft.kind==='app'&&!draft.target){document.querySelector('#form-error').textContent='Оберіть застосунок зі списку, файл або вкажіть посилання.';document.querySelector('#app-search,#action-target')?.focus();return;}if(!draft.name){document.querySelector('#form-error').textContent='Вкажіть назву дії.';document.querySelector('#action-name').focus();return;}const next=structuredClone(state),old=state;state=next;if(existing){const found=locate(existing.id);found.items[found.index]=draft;}else currentGroup().items.push(draft);state=old;if(await save(next,existing?'Дію збережено':'Дію додано')){selectedId=draft.id;closeModal();render();}};
+    document.querySelector('#action-form').onsubmit=event=>{event.preventDefault();submit();};
+  }
+  async function addPicked(){
+    const entries=[...pickerConfig.picked.values()],free=12-currentGroup().items.length;
+    if(entries.length>free){document.querySelector('#form-error').textContent=`У цьому колесі є місце ще для ${free} ${actionsWord(free)}.`;return;}
+    const next=structuredClone(state),old=state;state=next;
+    const added=entries.map(entry=>({id:uuid(),name:entry.name,kind:'app',target:entry.target,args:entry.args||'',icon:'app',children:[]}));
+    currentGroup().items.push(...added);state=old;
+    if(await save(next,`Додано ${added.length} ${actionsWord(added.length)}`)){selectedId=added.at(-1).id;closeModal();render();}
+  }
+  async function submit(){
+    capture();if(!existing&&draft.kind==='app'&&pickerConfig.picked?.size){await addPicked();return;}if(draft.kind==='app'&&!draft.target){document.querySelector('#form-error').textContent='Оберіть застосунок зі списку, файл або вкажіть посилання.';document.querySelector('#app-search,#action-target')?.focus();return;}if(!draft.name){document.querySelector('#form-error').textContent='Вкажіть назву дії.';document.querySelector('#action-name').focus();return;}const next=structuredClone(state),old=state;state=next;if(existing){const found=locate(existing.id);found.items[found.index]=draft;}else currentGroup().items.push(draft);state=old;if(await save(next,existing?'Дію збережено':'Дію додано')){selectedId=draft.id;closeModal();
+      // A new group opens right away so its actions can be added without finding it in the list.
+      if(!existing&&draft.kind==='group'){await openEditorGroup(draft.id);root.querySelector('.panel-head [data-command="add-action"]')?.focus();}else render();}
   }draw();
 }
 
+// Files and folders dragged in from Explorer become actions in the open menu or group.
+const draggingFiles=event=>[...(event.dataTransfer?.types||[])].includes('Files');
+async function addDroppedFiles(files){
+  let found=[];
+  try{found=await api.inspectDropped(files.map(file=>api.pathForFile(file)).filter(Boolean));}catch(error){toast(error.message,true);return;}
+  if(!found.length){toast('Перетягніть програму (.exe, .lnk), папку або скрипт.',true);return;}
+  if(page!=='menus'){page='menus';groupPath=[];}
+  const free=12-currentGroup().items.length;
+  if(free<=0){toast('У цьому колесі вже 12 дій. Створіть групу або інше меню.',true);render();return;}
+  const next=structuredClone(state),old=state;state=next;
+  const added=found.slice(0,free).map(entry=>({id:uuid(),name:entry.name,kind:entry.kind,target:entry.target,args:'',icon:entry.kind==='app'?'app':'',children:[]}));
+  currentGroup().items.push(...added);state=old;
+  const skipped=found.length-added.length;
+  selectedId=added.at(-1).id;
+  await save(next,skipped?`Додано ${added.length} ${actionsWord(added.length)}; ще ${skipped} не вмістилося в колесо`:`Додано ${added.length} ${actionsWord(added.length)}`);
+}
+if(!overlay){
+  document.addEventListener('dragover',event=>{if(!draggingFiles(event))return;event.preventDefault();const blocked=!!document.querySelector('.modal');event.dataTransfer.dropEffect=blocked?'none':'copy';document.body.classList.toggle('file-drop',!blocked);});
+  document.addEventListener('dragleave',event=>{if(!event.relatedTarget)document.body.classList.remove('file-drop');});
+  document.addEventListener('drop',event=>{if(!draggingFiles(event))return;event.preventDefault();document.body.classList.remove('file-drop');if(!document.querySelector('.modal'))addDroppedFiles([...event.dataTransfer.files]);});
+}
 root.addEventListener('click',async event=>{
   if(actionDrag?.suppressClick()&&event.target.closest('[data-row-id]')){event.preventDefault();return;}
   if(wheelEditorDrag?.suppressClick()&&event.target.closest('#preview-wheel')){event.preventDefault();return;}
+  if(event.target.closest('#preview-wheel [data-add-slot]')){actionDialog();return;}
   const button=event.target.closest('button');
   if(button?.dataset.page){page=button.dataset.page;groupPath=[];render();return;}
   if(button?.dataset.menuId){groupPath=[];selectedId='';await change({activeMenuId:button.dataset.menuId});return;}

@@ -29,7 +29,8 @@ export function bindWheelEditorDrag(root,{getItems,parentDropError,onReorder,onM
       center.classList.add(error?'parent-drop-rejected':'parent-drop');
       target={kind:'parent',error};return;
     }
-    const item=getItems()[sectorAt(x,y,getItems().length,92,207)];
+    // Count rendered sectors so the trailing "+" slot keeps the geometry but is never a target.
+    const item=getItems()[sectorAt(x,y,mount.querySelectorAll('.wheel-sector').length,92,207)];
     if(!item||item.id===gesture.id)return;
     for(const node of mount.querySelectorAll('[data-sector],[data-wheel-id]'))if(node.dataset.sector===item.id||node.dataset.wheelId===item.id)node.classList.add('reorder-target');
     target={kind:'reorder',id:item.id};

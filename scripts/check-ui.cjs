@@ -38,6 +38,13 @@ const fs = require('node:fs/promises');
       if(kind==='system')await dialog().locator(`[data-system="${target}"]`).click();
       else if(kind!=='group')await dialog().locator('#action-target').fill(target);
       await modalButton('Додати дію').click();await waitSave();
+      if(kind==='group'){
+        // A new group opens at once with its Add button focused.
+        await page.locator('[data-command="group-back"]').waitFor();
+        assert.equal(await page.locator('#preview-wheel .wheel-center strong').textContent(),name);
+        assert.equal(await page.evaluate(()=>document.activeElement?.dataset.command),'add-action');
+        await page.locator('[data-command="group-back"]').click();
+      }
       await page.locator('.action-name').filter({hasText:name}).waitFor();
     };
     await add('folder','QA папка',project);
@@ -49,7 +56,10 @@ const fs = require('node:fs/promises');
     assert.equal(saved.menus.find(m=>m.id===saved.activeMenuId).items.length,5);
     await page.reload();await page.waitForSelector('html[data-ready="true"]');
     assert.equal(await page.locator('.action-list .action-row').count(),5);
-    console.log('PASS: create/rename menu, all five action types, persistence after reload');
+    await page.locator('#preview-wheel .wheel-add').click();await dialog().getByRole('heading',{name:'Додати дію'}).waitFor();
+    await page.waitForFunction(()=>!document.getAnimations().some(animation=>animation.playState==='running'));
+    await page.keyboard.press('Escape');await page.keyboard.press('Escape');await waitSave();
+    console.log('PASS: create/rename menu, all five action types, new group opens, add sector, persistence after reload');
 
     await page.getByRole('button',{name:'Відкрити групу QA група',exact:true}).click();
     await add('system','Параметри Windows','settings');
@@ -70,7 +80,7 @@ const fs = require('node:fs/promises');
     await groupRow().waitFor();
     // Aim at the exposed outer ring of the SVG sector, away from its icon button.
     const sectorPoint=await page.locator(`#preview-wheel [data-sector="${qaGroup.id}"]`).evaluate(sector=>{
-      const sectors=[...sector.parentElement.querySelectorAll('[data-sector]')];
+      const sectors=[...sector.parentElement.querySelectorAll('.wheel-sector')];
       const angle=(-90+sectors.indexOf(sector)*360/sectors.length)*Math.PI/180;
       const bounds=sector.closest('svg').getBoundingClientRect();
       return{x:bounds.left+bounds.width*(.5+195*Math.cos(angle)/480),y:bounds.top+bounds.height*(.5+195*Math.sin(angle)/480)};

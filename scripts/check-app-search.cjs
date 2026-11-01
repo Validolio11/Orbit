@@ -26,17 +26,38 @@ const path=require('node:path');
     await page.locator('.app-result-copy strong').filter({hasText:candidate.name}).first().waitFor();
     await page.getByLabel('Знайти застосунок',{exact:true}).press('ArrowDown');
     await page.getByLabel('Знайти застосунок',{exact:true}).press('Enter');
-    assert.equal(await dialog().count(),1,'Choosing a result must not submit the action');
+    // Picking a result adds the action at once.
+    await waitClosed();
+    let saved=await page.evaluate(()=>window.orbit.getState());
+    const before=saved.menus[0].items.length,quick=saved.menus[0].items.at(-1);
+    assert.equal(quick.name,candidate.name);assert.equal(quick.target,candidate.target);
+    // Ticked results are added together by the footer button.
+    await add();await page.getByLabel('Знайти застосунок',{exact:true}).fill(candidate.name);
+    await page.locator('.app-result-copy strong').filter({hasText:candidate.name}).first().waitFor();
+    await page.locator('.app-result-check').first().click();
+    assert.equal(await dialog().count(),1,'Ticking a result must keep the dialog open');
+    await dialog().getByRole('button',{name:'Додати вибрані (1)',exact:true}).click();await waitClosed();
+    saved=await page.evaluate(()=>window.orbit.getState());
+    assert.equal(saved.menus[0].items.length,before+1);assert.equal(saved.menus[0].items.at(-1).target,candidate.target);
+    saved.menus[0].items=saved.menus[0].items.slice(0,before-1);await page.evaluate(next=>window.orbit.saveState(next),saved);
+    await page.waitForFunction(count=>document.querySelectorAll('.action-list .action-row').length===count,before-1);
+    // With the advanced fields open, picking fills the form so the name can still be edited.
+    await add();await page.getByLabel('Знайти застосунок',{exact:true}).press('Escape');await dialog().locator('.app-advanced>summary').click();
+    await page.getByLabel('Знайти застосунок',{exact:true}).fill(candidate.name);
+    await page.locator('.app-result-copy strong').filter({hasText:candidate.name}).first().waitFor();
+    await page.getByLabel('Знайти застосунок',{exact:true}).press('ArrowDown');
+    await page.getByLabel('Знайти застосунок',{exact:true}).press('Enter');
+    assert.equal(await dialog().count(),1,'With advanced fields open, choosing must not submit');
     assert.equal(await page.getByLabel('Назва в колесі').inputValue(),candidate.name);
     assert.equal(await page.locator('#action-target').inputValue(),candidate.target);
     await page.getByLabel('Назва в колесі').fill('QA обрана програма');
     await dialog().getByRole('button',{name:'Додати дію',exact:true}).click();await waitClosed();
-    let saved=await page.evaluate(()=>window.orbit.getState());
+    saved=await page.evaluate(()=>window.orbit.getState());
     const action=saved.menus[0].items.find(i=>i.name==='QA обрана програма');
     assert.equal(action.target,candidate.target);
     await page.reload();await page.waitForSelector('html[data-ready="true"]');
     await page.locator('.action-row').filter({hasText:'QA обрана програма'}).waitFor();
-    console.log('PASS: actual installed-app search, autofocus, keyboard select, auto fields, alias and persistence');
+    console.log('PASS: actual installed-app search, autofocus, one-step add, multi-select, advanced edit, alias and persistence');
 
     await add();await page.getByLabel('Знайти застосунок',{exact:true}).fill('no-such-orbit-app-zzzz-12345');
     await page.getByText('Нічого не знайдено. Спробуйте іншу назву або оберіть файл.',{exact:true}).waitFor();

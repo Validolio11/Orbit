@@ -15,7 +15,7 @@ const NATIVE = app.isPackaged && __dirname.includes('app.asar')
   : path.join(__dirname, '..', 'native', 'Orbit.Input.exe');
 const PAGE = path.join(__dirname, 'renderer', 'index.html');
 const APP_ICON = path.join(__dirname, '..', 'assets', 'orbit.ico');
-const { validateAction, validateState, parseArguments, wheelGeometry, wheelMountSize, shouldCloseWheelOnClick } = require('./core.cjs');
+const { droppedAction, validateAction, validateState, parseArguments, wheelGeometry, wheelMountSize, shouldCloseWheelOnClick } = require('./core.cjs');
 const { createAppCatalog, validatePackagedTarget, isLocalAppPath } = require('./app-catalog.cjs');
 const { createUpdater } = require('./updater.cjs');
 const UPDATE_REPOSITORY = 'Validolio11/Orbit';
@@ -394,6 +394,17 @@ function registerIPC() {
   handle('orbit:minimize', () => mainWindow.minimize());
   handle('orbit:maximize', () => mainWindow.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize());
   handle('orbit:close-window', () => mainWindow.close());
+  handle('orbit:inspect-dropped', async paths => {
+    if (!Array.isArray(paths) || paths.length > 50) throw new Error('Invalid dropped files.');
+    const actions = [];
+    for (const value of paths) {
+      if (typeof value !== 'string' || !path.isAbsolute(value)) continue;
+      const stat = await fsp.stat(value).catch(() => null);
+      const action = stat && droppedAction(value, stat.isDirectory());
+      if (action) actions.push(action);
+    }
+    return actions;
+  });
   handle('orbit:pick-target', async kind => {
     if (!['app', 'folder', 'script'].includes(kind)) throw new Error('Invalid picker kind.');
     const result = await dialog.showOpenDialog(mainWindow, { title: kind === 'folder' ? 'Виберіть папку' : 'Виберіть файл',

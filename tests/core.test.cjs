@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { validateState, validateAction, parseArguments, wheelGeometry, wheelMountSize, pointIsOutsideWheel, shouldCloseWheelOnClick } = require('../src/core.cjs');
+const { droppedAction, validateState, validateAction, parseArguments, wheelGeometry, wheelMountSize, pointIsOutsideWheel, shouldCloseWheelOnClick } = require('../src/core.cjs');
 
 const action = (id = 'item', kind = 'app', target = 'C:\\Apps\\Editor.exe') => ({ id, name: 'Дія', kind, target, args: '', icon: 'app', children: [] });
 function configuration() {
@@ -153,4 +153,13 @@ test('outside-click cancellation matches the applied circle size when preference
   const radius = 207 / 480 * appliedSize;
   assert.equal(pointIsOutsideWheel({ x: bounds.x + center.x + radius - .1, y: click.y }, bounds, appliedSize), false);
   assert.equal(pointIsOutsideWheel({ x: bounds.x + center.x + radius + .1, y: click.y }, bounds, appliedSize), true);
+});
+
+test('dropped Explorer paths become folder, app or script actions and other files are ignored', () => {
+  assert.deepEqual(droppedAction('C:\\Projects\\Client.v2', true), { kind: 'folder', name: 'Client.v2', target: 'C:\\Projects\\Client.v2' });
+  assert.deepEqual(droppedAction('C:\\', true), { kind: 'folder', name: 'C:', target: 'C:\\' });
+  assert.deepEqual(droppedAction('C:\\Tools\\Blender.EXE', false), { kind: 'app', name: 'Blender', target: 'C:\\Tools\\Blender.EXE' });
+  assert.equal(droppedAction('C:\\Users\\Me\\Desktop\\Figma.lnk', false).kind, 'app');
+  assert.deepEqual(droppedAction('D:\\Scripts\\render.ps1', false), { kind: 'script', name: 'render', target: 'D:\\Scripts\\render.ps1' });
+  for (const file of ['C:\\Docs\\notes.txt', 'C:\\Media\\clip.mp4', 'C:\\Tools\\README']) assert.equal(droppedAction(file, false), null);
 });

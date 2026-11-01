@@ -20,14 +20,19 @@ export function sectorPath(index,count,inner=92,outer=207,gap=6){
 }
 export function renderWheel(container,items,options={}){
   const title=options.title||'Orbit';
+  // The editor preview can end with an extra "+" sector that adds an action in that slot.
+  const slot=options.addSlot&&items.length>0,count=items.length+(slot?1:0);
+  const slotAngle=(-90+items.length*360/count)*Math.PI/180;
   container.innerHTML=`<div class="wheel" role="group" aria-label="Радіальне меню ${escapeHTML(title)}">
     <svg class="wheel-sectors" viewBox="0 0 480 480" aria-hidden="true">
       <circle class="wheel-guide" cx="240" cy="240" r="224"/>
-      ${items.map((item,i)=>`<path class="wheel-sector ${options.selected===item.id?'selected':''}" data-sector="${escapeHTML(item.id)}" d="${sectorPath(i,items.length)}"/>`).join('')}
+      ${items.map((item,i)=>`<path class="wheel-sector ${options.selected===item.id?'selected':''}" data-sector="${escapeHTML(item.id)}" d="${sectorPath(i,count)}"/>`).join('')}
+      ${slot?`<path class="wheel-sector wheel-add-sector" data-add-slot d="${sectorPath(items.length,count)}"/>`:''}
     </svg>
+    ${slot?`<button class="wheel-item wheel-add" data-add-slot type="button" style="left:${50+150*Math.cos(slotAngle)/4.8}%;top:${50+150*Math.sin(slotAngle)/4.8}%;--wheel-label-width:${(wheelLabelWidth(slotAngle,count)/4.8).toFixed(3)}cqw" aria-label="Додати дію">${icon('plus',22)}<span class="wheel-item-label">Додати</span></button>`:''}
     ${items.map((item,i)=>{
-      const a=(-90+i*360/items.length)*Math.PI/180,r=150;
-      const labelWidth=wheelLabelWidth(a,items.length);
+      const a=(-90+i*360/count)*Math.PI/180,r=150;
+      const labelWidth=wheelLabelWidth(a,count);
       return `<button class="wheel-item ${options.selected===item.id?'selected':''}" data-wheel-id="${escapeHTML(item.id)}" style="left:${50+r*Math.cos(a)/4.8}%;top:${50+r*Math.sin(a)/4.8}%;--wheel-label-width:${(labelWidth/4.8).toFixed(3)}cqw" title="${escapeHTML(item.name)}" aria-label="${escapeHTML(item.name)}${item.kind==='group'?', група':''}">
        ${itemIcon(item,25)}<span class="wheel-item-label">${escapeHTML(item.name)}</span>${item.kind==='group'?'<i class="group-indicator">···</i>':''}
       </button>`;
@@ -36,7 +41,7 @@ export function renderWheel(container,items,options={}){
       ${icon(options.back?'back':'orbit',options.back?24:30)}
       <strong>${escapeHTML(title)}</strong><small>${options.back?'Назад':items.length+' дій'}</small>
     </button>
-    ${items.length===0?'<span class="wheel-empty">Додайте першу дію</span>':''}
+    ${items.length===0?(options.addSlot?'<button class="wheel-empty" data-add-slot type="button">Додайте першу дію</button>':'<span class="wheel-empty">Додайте першу дію</span>'):''}
   </div>`;
 }
 

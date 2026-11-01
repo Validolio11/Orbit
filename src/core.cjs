@@ -112,4 +112,15 @@ function shouldCloseWheelOnClick(event, visible, closeOnOutsideClick, bounds, wh
   return visible === true && closeOnOutsideClick === true && event?.type === 'click' && ['left', 'right', 'middle'].includes(event.button) && pointIsOutsideWheel(event, bounds, wheelSize);
 }
 
-module.exports = { validateAction, validateState, parseArguments, wheelGeometry, wheelMountSize, pointIsOutsideWheel, shouldCloseWheelOnClick };
+// Turns a path dragged in from Explorer into an action, or null when Orbit cannot launch it.
+function droppedAction(filePath, isDirectory) {
+  const base = filePath.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || filePath;
+  if (isDirectory) return { kind: 'folder', name: base, target: filePath };
+  const extension = (/\.[^.\\/]+$/.exec(base)?.[0] || '').toLowerCase();
+  const name = base.slice(0, base.length - extension.length) || base;
+  if (['.exe', '.lnk'].includes(extension)) return { kind: 'app', name, target: filePath };
+  if (['.ps1', '.py', '.js', '.cjs'].includes(extension)) return { kind: 'script', name, target: filePath };
+  return null;
+}
+
+module.exports = { droppedAction, validateAction, validateState, parseArguments, wheelGeometry, wheelMountSize, pointIsOutsideWheel, shouldCloseWheelOnClick };
