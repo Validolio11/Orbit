@@ -157,3 +157,11 @@ Remaining hardware validation: press Mouse4/Mouse5 on the user's actual mouse, e
 - First run: Adobe only when installed, popular installed apps fill the main menu, a dismissible hint explains the side button. Tray: single click opens, menu adds "Додати дію…" and menu switching.
 - The app tab is an inline tile grid filtered by search (no dropdown); Store apps get real icons via `shell:AppsFolder`, uninstall shortcuts are excluded. Enter before results refresh searches first; the advanced section is read from the DOM when picking.
 - Unit 63, UI, search (3 consecutive runs), drag, wheel-drag, wheel-add, icons and updates suites pass. The keyboard UI check was fixed by installing its pointer guard before the wheel opens.
+
+## Folder, script and group tabs · 0.1.10
+
+- Папка: tiles for Quick Access folders (Shell.Application, ~140 ms), standard folders with Ukrainian names and own icons, and drives labelled as in "This PC". A click adds the folder under its own name; ticks add several; "Обрати папку…" adds at once; the manual path is under "Вказати шлях вручну" and an empty name comes from the folder. A picked folder is written into the form before submit, since submit re-reads it.
+- Скрипт: .ps1/.py/.js/.cjs files from the desktop, Documents, Downloads and folders of existing script actions (two levels, bounded, newest first) as tiles with a type badge; filter, click-to-add named after the file, ticks, and "Обрати файл…". Arguments are under the advanced section, where a picked script only fills the form. .py tiles are marked when py.exe is missing; an empty result shows an "Обрати файл…" prompt.
+- Група: name suggestions that also pick an icon, nine icons, and "Перенести в групу" moving ticked actions into the new group at the first one's place.
+- Names Orbit filled in no longer carry over when the action type changes.
+- `npm run test:wheel-add` covers the folder tile, the carry-over fix, script tiles (type, filter, add) and group creation with moved actions. Quick Access and drive labels are skipped in isolated tests; the query was run against the real Explorer.
