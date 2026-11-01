@@ -1,11 +1,11 @@
 function findAction(state,id){
     for(const menu of state.menus){
-      const walk=(items,depth=0,parent=null)=>{
+      const walk=(items,depth=0,parent=null,parentItems=null)=>{
         for(let index=0;index<items.length;index++){
           const item=items[index];
-          if(item.id===id)return {item,items,index,depth,parent,menu};
+          if(item.id===id)return {item,items,index,depth,parent,parentItems,menu};
           if(item.kind==='group'){
-            const found=walk(item.children,depth+1,item);
+            const found=walk(item.children,depth+1,item,items);
             if(found)return found;
           }
         }
@@ -55,5 +55,32 @@ export function moveActionToRoot(state,sourceId){
   if(!source.parent)return next;
   source.items.splice(source.index,1);
   source.menu.items.push(source.item);
+  return next;
+}
+
+/** Reorder siblings so the source takes the target's original position. */
+export function reorderAction(state,sourceId,targetId){
+  const originalSource=findAction(state,sourceId),originalTarget=findAction(state,targetId);
+  if(!originalSource)throw new Error('Дію для переміщення не знайдено.');
+  if(!originalTarget)throw new Error('Дію призначення не знайдено.');
+  if(originalSource.items!==originalTarget.items)throw new Error('Змінити порядок можна лише між діями одного рівня меню.');
+  const next=structuredClone(state);
+  if(sourceId===targetId)return next;
+  const source=findAction(next,sourceId),target=findAction(next,targetId);
+  source.items.splice(source.index,1);
+  source.items.splice(target.index,0,source.item);
+  return next;
+}
+
+/** Move an action to the collection immediately above its containing group. */
+export function moveActionToParent(state,sourceId){
+  const original=findAction(state,sourceId);
+  if(!original)throw new Error('Дію для переміщення не знайдено.');
+  if(original.parent&&original.parentItems.length>=12)throw new Error('На рівні вище вже 12 дій. Спочатку звільніть місце в цьому меню.');
+  const next=structuredClone(state);
+  const source=findAction(next,sourceId);
+  if(!source.parent)return next;
+  source.items.splice(source.index,1);
+  source.parentItems.push(source.item);
   return next;
 }

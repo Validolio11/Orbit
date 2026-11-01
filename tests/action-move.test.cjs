@@ -135,3 +135,99 @@ test('missing actions and full roots reject before detaching the source',async()
   assert.deepEqual(original,snapshot);
   assert.deepEqual(validateState(original),snapshot);
 });
+
+test('sector reorder inserts at the target original index in either direction',async()=>{
+  const {reorderAction}=await import('../src/renderer/action-move.mjs');
+  const original=configuration(['a','b','c','d','e'].map(id=>action(id)));
+  const snapshot=structuredClone(original);
+  for(const [source,target,expected]of [
+    ['a','c',['b','c','a','d','e']],
+    ['e','b',['a','e','b','c','d']],
+    ['d','b',['a','d','b','c','e']],
+    ['b','d',['a','c','d','b','e']],
+    ['a','e',['b','c','d','e','a']],
+    ['e','a',['e','a','b','c','d']],
+  ]){
+    const moved=reorderAction(original,source,target);
+    assert.deepEqual(moved.menus[0].items.map(item=>item.id),expected);
+    assert.deepEqual(validateState(moved),moved);
+    assert.deepEqual(original,snapshot);
+  }
+});
+
+test('nested sector reorder preserves group metadata and subtrees and permits self no-ops',async()=>{
+  const {reorderAction}=await import('../src/renderer/action-move.mjs');
+  const branch=group('tools',[action('editor')]);
+  const original=configuration([group('adobe',[action('illustrator'),branch,action('photoshop')])]);
+  const snapshot=structuredClone(original),moved=reorderAction(original,'tools','photoshop');
+  assert.deepEqual(moved.menus[0].items[0].children.map(item=>item.id),['illustrator','photoshop','tools']);
+  assert.deepEqual(moved.menus[0].items[0].children[2],branch);
+  assert.deepEqual(validateState(moved),moved);
+  const same=reorderAction(original,'tools','tools');
+  assert.notEqual(same,original);assert.deepEqual(same,original);
+  assert.deepEqual(original,snapshot);
+});
+
+test('sector reorder rejects missing or nonsibling targets without losing actions',async()=>{
+  const {reorderAction}=await import('../src/renderer/action-move.mjs');
+  const original=configuration([action('app'),group('adobe',[action('child')])]);
+  original.menus.push({id:'second',name:'Second',icon:'orbit',items:[action('other-root')]});validateState(original);
+  const snapshot=structuredClone(original);
+  for(const [source,target,message]of [
+    ['missing','app',/Дію для переміщення/],['app','missing',/Дію призначення/],
+    ['app','child',/одного рівня/],['app','other-root',/одного рівня/],
+  ]){
+    assert.throws(()=>reorderAction(original,source,target),message);
+    assert.deepEqual(original,snapshot);
+  }
+});
+
+test('center drop moves a nested action exactly one level up rather than directly to root',async()=>{
+  const {moveActionToParent}=await import('../src/renderer/action-move.mjs');
+  const original=configuration([group('adobe',[action('before'),group('motion',[action('after-effects'),action('premiere')]),action('after')]),action('root-app')]);
+  const snapshot=structuredClone(original),moved=moveActionToParent(original,'after-effects');
+  assert.deepEqual(moved.menus[0].items.map(item=>item.id),['adobe','root-app']);
+  assert.deepEqual(moved.menus[0].items[0].children.map(item=>item.id),['before','motion','after','after-effects']);
+  assert.deepEqual(moved.menus[0].items[0].children[1].children.map(item=>item.id),['premiere']);
+  assert.deepEqual(moved.menus[0].items[0].children.at(-1),snapshot.menus[0].items[0].children[1].children[0]);
+  assert.deepEqual(validateState(moved),moved);
+  assert.deepEqual(original,snapshot);
+});
+
+test('parent moves preserve deep group subtrees and stay in their containing menu',async()=>{
+  const {moveActionToParent}=await import('../src/renderer/action-move.mjs');
+  const branch=group('tools',[action('editor'),group('extras',[action('render')])]);
+  const original=configuration([action('main-app')]);
+  original.menus.push({id:'second',name:'Second',icon:'orbit',items:[group('outer',[group('inner',[branch])])]});validateState(original);
+  const snapshot=structuredClone(original),moved=moveActionToParent(original,'tools');
+  assert.deepEqual(moved.menus[0],snapshot.menus[0]);
+  assert.equal(moved.menus[1].items[0].children[0].children.length,0);
+  assert.deepEqual(moved.menus[1].items[0].children.map(item=>item.id),['inner','tools']);
+  assert.deepEqual(moved.menus[1].items[0].children[1],branch);
+  assert.deepEqual(validateState(moved),moved);
+  assert.deepEqual(original,snapshot);
+});
+
+test('parent move capacity checks use the immediate destination and reject before detach',async()=>{
+  const {moveActionToParent}=await import('../src/renderer/action-move.mjs');
+  const original=configuration([group('outer',[group('inner',[action('child')]),...Array.from({length:11},(_,index)=>action(`sibling-${index}`))])]);
+  const snapshot=structuredClone(original);
+  assert.throws(()=>moveActionToParent(original,'child'),/На рівні вище вже 12 дій/);
+  assert.throws(()=>moveActionToParent(original,'missing'),/Дію для переміщення не знайдено/);
+  assert.deepEqual(original,snapshot);
+  const fullRoot=configuration([group('adobe',[action('nested-app')]),...Array.from({length:11},(_,index)=>action(`root-${index}`))]);
+  assert.throws(()=>moveActionToParent(fullRoot,'nested-app'),/12 дій/);
+  const noOp=moveActionToParent(fullRoot,'adobe');
+  assert.notEqual(noOp,fullRoot);assert.deepEqual(noOp,fullRoot);
+  assert.deepEqual(validateState(noOp),noOp);
+});
+
+test('a direct group child can move one level up into the root as its final item',async()=>{
+  const {moveActionToParent}=await import('../src/renderer/action-move.mjs');
+  const original=configuration([group('adobe',[action('illustrator')]),action('browser')]);
+  const moved=moveActionToParent(original,'illustrator');
+  assert.deepEqual(moved.menus[0].items.map(item=>item.id),['adobe','browser','illustrator']);
+  assert.equal(moved.menus[0].items[0].children.length,0);
+  assert.deepEqual(validateState(moved),moved);
+  assert.equal(original.menus[0].items[0].children.length,1);
+});

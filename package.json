@@ -1,7 +1,7 @@
 {
   "name": "orbit-desktop",
   "productName": "Orbit",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "private": true,
   "description": "Orbit — a mouse-first radial launcher for Windows",
   "main": "src/main.cjs",
@@ -23,7 +23,8 @@
     "test:updates": "node scripts/check-updates.cjs",
     "test:updater": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-updater.ps1",
     "test:drag": "node scripts/check-drag.cjs",
-    "test:icons": "node scripts/check-icons.cjs"
+    "test:icons": "node scripts/check-icons.cjs",
+    "test:wheel-drag": "node scripts/check-wheel-drag.cjs"
   },
   "devDependencies": {
     "@electron/packager": "^20.3.0",

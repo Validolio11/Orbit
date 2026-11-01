@@ -3,7 +3,8 @@ import {escapeHTML as e,renderWheel,sectorAt} from './wheel.mjs';
 import {appPickerFields,mountAppPicker} from './app-picker.mjs';
 import {updatesSettings,refreshUpdates} from './updates.mjs';
 import {bindActionDrag} from './action-drag.mjs';
-import {moveActionToGroup,moveActionToRoot} from './action-move.mjs';
+import {bindWheelEditorDrag} from './wheel-editor-drag.mjs';
+import {moveActionToGroup,moveActionToRoot,reorderAction,moveActionToParent} from './action-move.mjs';
 
 const api=window.orbit;
 const overlay=new URLSearchParams(location.search).has('overlay');
@@ -45,11 +46,23 @@ const actionDrag=overlay?null:bindActionDrag(root,{
     }else selectedId=previous;
   },
 });
+const wheelEditorDrag=overlay?null:bindWheelEditorDrag(root,{
+  getItems:()=>currentGroup().items,
+  parentDropError:()=>{
+    if(!groupPath.length)return 'Уже в головному меню';
+    const parentItems=groupPath.length===1?currentMenu().items:locate(groupPath.at(-2)).item.children;
+    return parentItems.length>=12?'На попередньому рівні вже 12 дій':null;
+  },
+  onReorder:async(id,target)=>{await save(reorderAction(state,id,target),'Порядок змінено');},
+  onMoveParent:async id=>{await save(moveActionToParent(state,id),'Переміщено на рівень вище');},
+  onError:message=>toast(message,true),
+});
 function statusLabel(){return !state.enabled?'Призупинено':runtime.hookReady?'Orbit активний':runtime.hookError?'Миша недоступна':'Запуск модуля миші…';}
 function statusMarkup(){return `<span class="status-badge ${!state.enabled||!runtime.hookReady?'off':''}"><span class="status-dot ${!state.enabled||!runtime.hookReady?'off':''}"></span>${e(statusLabel())}</span>`;}
 
 function render(){
   actionDrag?.reset();
+  wheelEditorDrag?.reset();
   const count=state.menus.length;
   root.innerHTML=`<div class="app-shell">
     <header class="titlebar"><div class="title-brand">${icon('orbit',24)}<span>Orbit</span><span class="version">${e(updateStatus.currentVersion)}</span></div><div class="titlebar-center">Ваші інструменти. Поруч.</div><div class="window-controls"><button class="window-control" data-command="minimize" aria-label="Згорнути">${icon('minus',15)}</button><button class="window-control" data-command="maximize" aria-label="Розгорнути">${icon('app',13)}</button><button class="window-control close" data-command="close-window" aria-label="Згорнути в трей">${icon('close',16)}</button></div></header>
@@ -70,14 +83,14 @@ function menusPage(){
   const menu=currentMenu(),group=currentGroup();
   return `<div class="page-header"><div><h1>Мої меню</h1><p>Програми, папки та команди — в одному русі.</p></div><div class="header-actions"><button class="btn" data-command="new-menu">${icon('plus',15)}Створити меню</button><button class="btn primary" data-command="preview">${icon('play',14)}Викликати колесо</button></div></div>
     <div class="menu-tabs" role="tablist" aria-label="Набори меню">${state.menus.map(m=>`<button class="menu-tab ${m.id===menu.id?'active':''}" data-menu-id="${e(m.id)}" role="tab" aria-selected="${m.id===menu.id}">${icon('wheel',14)}${e(m.name)}<span class="tiny-count">${m.items.length}</span></button>`).join('')}<div class="tabs-extra"><button class="icon-btn" data-command="rename-menu" aria-label="Перейменувати меню">${icon('edit',14)}</button><button class="icon-btn" data-command="duplicate-menu" aria-label="Дублювати меню">${icon('copy',14)}</button>${state.menus.length>1?`<button class="icon-btn danger" data-command="delete-menu" aria-label="Видалити меню">${icon('trash',14)}</button>`:''}</div></div>
-    <div class="menu-editor"><section class="panel preview-panel"><div class="panel-head"><h2>Попередній перегляд</h2><span class="micro-label">${group.items.length} / 12</span></div><div class="preview-surface">${groupPath.length?`<button class="btn small preview-back" data-command="group-back">${icon('back',13)}Назад</button>`:''}<div class="wheel-mount" id="preview-wheel"></div><span class="preview-label">${groupPath.length?e(group.name.toUpperCase()):'ORBIT / RADIAL MENU'}</span></div><div class="preview-bottom">${icon('info',15)}<span>Оберіть сектор для редагування. Група відкриває вкладене меню.</span></div></section>
+    <div class="menu-editor"><section class="panel preview-panel"><div class="panel-head"><h2>Попередній перегляд</h2><span class="micro-label">${group.items.length} / 12</span></div><div class="preview-surface">${groupPath.length?`<button class="btn small preview-back" data-command="group-back">${icon('back',13)}Назад</button>`:''}<div class="wheel-mount" id="preview-wheel"></div><span class="preview-label">${groupPath.length?e(group.name.toUpperCase()):'ORBIT / RADIAL MENU'}</span></div><div class="preview-bottom">${icon('info',15)}<span>Перетягніть сектор, щоб змінити порядок. Центр переносить дію на рівень вище.</span></div></section>
     <section class="panel"><div class="panel-head"><h2>${groupPath.length?e(group.name):'Дії в меню'}</h2><button class="btn small ghost" data-command="add-action" ${group.items.length>=12?'disabled':''}>${icon('plus',13)}Додати</button></div><div class="action-list">${group.items.length?group.items.map((item,i)=>actionRow(item,i)).join(''):`<div class="empty-state">${icon('plus',26)}<strong>Поки що порожньо</strong><p>Додайте програму, папку або команду до цього колеса.</p><button class="btn" data-command="add-action">Додати дію</button></div>`}</div><div class="list-footer"><span>${groupPath.length?'Вкладене меню':'Перетягніть дію на групу, щоб перемістити'}</span><span>${group.items.length} / 12</span></div></section></div>
     <div class="quick-settings"><button class="quick-setting" data-page="controls">${icon('mouse',22)}<span class="setting-copy"><strong>Бічна кнопка ${state.triggerButton}</strong><small>Виклик колеса · Ctrl + Space</small></span>${icon('chevron',14)}</button><button class="quick-setting" data-page="controls">${icon(state.activationMode==='hover'?'mouse':'play',21)}<span class="setting-copy"><strong>${activationNames[state.activationMode]}</strong><small>${state.activationMode==='hover'?`Затримка ${state.hoverDelay} мс`:'Спосіб запуску обраної дії'}</small></span>${icon('chevron',14)}</button></div>
     <div class="page-foot"><span>${icon('check',12)}Зміни зберігаються автоматично</span>${statusMarkup()}</div>`;
 }
 function actionDescription(item){if(item.kind==='group')return `${item.children.length} ${item.children.length===1?'дія':'дій'} у вкладеному меню`;if(item.kind==='system')return systemNames[item.target]||'Системна команда';return item.target||'Виберіть шлях до застосунку';}
 function actionRow(item,index,library=false,context=''){
-  return `<div class="action-row ${selectedId===item.id?'selected':''}" data-row-id="${e(item.id)}" ${!library?`draggable="true" title="Перетягніть у групу" ${item.kind==='group'?`data-drop-group="${e(item.id)}"`:''}`:''} tabindex="0" role="button" aria-label="${item.kind==='group'?'Відкрити':'Редагувати'} ${e(item.name)}">${!library?`<span class="action-number">${String(index+1).padStart(2,'0')}</span>`:''}<span class="action-icon">${itemIcon(item,19)}</span><div class="action-copy"><div class="action-name">${e(item.name)}</div><div class="action-desc" title="${e(actionDescription(item))}">${e(context||actionDescription(item))}</div>${!library&&item.kind==='group'?'<div class="action-drop-message" aria-live="polite"></div>':''}</div>${library?`<span class="type-badge">${kinds[item.kind]}</span>`:''}<div class="action-tools">${!library&&groupPath.length?`<button class="icon-btn move-root" data-move-root="${e(item.id)}" aria-label="Перемістити ${e(item.name)} в головне меню" title="Перемістити в головне меню">${icon('moveRoot',13)}<span class="move-root-label">На головне</span></button>`:''}${!library?`<button class="icon-btn reorder" data-move-id="${e(item.id)}" data-direction="-1" aria-label="Перемістити ${e(item.name)} вище" ${index===0?'disabled':''}>${icon('arrowUp',12)}</button>`:''}${item.kind==='group'?`<button class="icon-btn" data-open-group="${e(item.id)}" aria-label="Відкрити групу ${e(item.name)}">${icon('chevron',15)}</button><button class="icon-btn" data-edit-id="${e(item.id)}" aria-label="Редагувати ${e(item.name)}" title="Редагувати групу">${icon('edit',13)}</button><button class="icon-btn danger" data-delete-group="${e(item.id)}" aria-label="Видалити групу ${e(item.name)}" title="Видалити групу">${icon('trash',13)}</button>`:`<button class="icon-btn" data-edit-id="${e(item.id)}" aria-label="Редагувати ${e(item.name)}">${icon('edit',13)}</button><button class="icon-btn danger" data-delete-action="${e(item.id)}" aria-label="Видалити дію ${e(item.name)}" title="Видалити дію">${icon('trash',13)}</button>`}</div></div>`;
+  return `<div class="action-row ${selectedId===item.id?'selected':''}" data-row-id="${e(item.id)}" ${!library?`draggable="true" title="Перетягніть у групу" ${item.kind==='group'?`data-drop-group="${e(item.id)}"`:''}`:''} tabindex="0" role="button" aria-label="${item.kind==='group'?'Відкрити':'Редагувати'} ${e(item.name)}">${!library?`<span class="action-number">${String(index+1).padStart(2,'0')}</span>`:''}<span class="action-icon">${itemIcon(item,19)}</span><div class="action-copy"><div class="action-name">${e(item.name)}</div><div class="action-desc" title="${e(actionDescription(item))}">${e(context||actionDescription(item))}</div>${!library&&item.kind==='group'?'<div class="action-drop-message" aria-live="polite"></div>':''}</div>${library?`<span class="type-badge">${kinds[item.kind]}</span>`:''}<div class="action-tools">${!library&&groupPath.length?`<button class="icon-btn move-root" data-move-root="${e(item.id)}" aria-label="Перемістити ${e(item.name)} в головне меню" title="Перемістити в головне меню">${icon('moveRoot',13)}</button>`:''}${!library?`<button class="icon-btn reorder" data-move-id="${e(item.id)}" data-direction="-1" aria-label="Перемістити ${e(item.name)} вище" ${index===0?'disabled':''}>${icon('arrowUp',12)}</button>`:''}${item.kind==='group'?`<button class="icon-btn" data-open-group="${e(item.id)}" aria-label="Відкрити групу ${e(item.name)}">${icon('chevron',15)}</button><button class="icon-btn" data-edit-id="${e(item.id)}" aria-label="Редагувати ${e(item.name)}" title="Редагувати групу">${icon('edit',13)}</button><button class="icon-btn danger" data-delete-group="${e(item.id)}" aria-label="Видалити групу ${e(item.name)}" title="Видалити групу">${icon('trash',13)}</button>`:`<button class="icon-btn" data-edit-id="${e(item.id)}" aria-label="Редагувати ${e(item.name)}">${icon('edit',13)}</button><button class="icon-btn danger" data-delete-action="${e(item.id)}" aria-label="Видалити дію ${e(item.name)}" title="Видалити дію">${icon('trash',13)}</button>`}</div></div>`;
 }
 function libraryPage(){
   const entries=flatten().filter(({item,path,menu})=>(item.name+' '+kinds[item.kind]+' '+menu.name+' '+path.join(' ')).toLowerCase().includes(search.toLowerCase()));
@@ -151,6 +164,7 @@ function actionDialog(id){
 
 root.addEventListener('click',async event=>{
   if(actionDrag?.suppressClick()&&event.target.closest('[data-row-id]')){event.preventDefault();return;}
+  if(wheelEditorDrag?.suppressClick()&&event.target.closest('#preview-wheel')){event.preventDefault();return;}
   const button=event.target.closest('button');
   if(button?.dataset.page){page=button.dataset.page;groupPath=[];render();return;}
   if(button?.dataset.menuId){groupPath=[];selectedId='';await change({activeMenuId:button.dataset.menuId});return;}
