@@ -302,6 +302,39 @@ async function listFolders() {
   return [...quick, ...known, ...drives];
 }
 
+// Scripts offered as tiles: a shallow, bounded scan of the usual places and of folders that already hold script actions.
+const SCRIPT_EXTENSIONS = new Set(['.ps1', '.py', '.js', '.cjs']);
+const SKIPPED_FOLDERS = new Set(['node_modules', '.git', 'appdata', '$recycle.bin', 'windows', 'program files', 'program files (x86)', '__pycache__', '.venv', 'venv']);
+async function listScripts() {
+  const roots = new Set();
+  for (const key of ['desktop', 'documents', 'downloads']) { try { roots.add(app.getPath(key)); } catch { } }
+  const walkActions = items => items.forEach(item => { if (item.kind === 'script' && path.isAbsolute(item.target)) roots.add(path.dirname(item.target)); if (item.kind === 'group') walkActions(item.children); });
+  state.menus.forEach(menu => walkActions(menu.items));
+  const found = new Map();
+  let visited = 0;
+  async function walk(folder, depth) {
+    if (visited++ > 600 || found.size >= 400) return;
+    const entries = await fsp.readdir(folder, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      const full = path.join(folder, entry.name);
+      if (entry.isFile() && SCRIPT_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) {
+        const stat = await fsp.stat(full).catch(() => null);
+        if (stat) found.set(full.toLowerCase(), { name: path.basename(entry.name, path.extname(entry.name)), path: full, extension: path.extname(entry.name).toLowerCase(), folder: path.basename(folder), modified: stat.mtimeMs });
+      } else if (entry.isDirectory() && depth < 2 && !entry.name.startsWith('.') && !SKIPPED_FOLDERS.has(entry.name.toLowerCase())) await walk(full, depth + 1);
+    }
+  }
+  for (const root of roots) await walk(root, 0);
+  const scripts = [...found.values()].sort((left, right) => right.modified - left.modified).slice(0, 60).map(({ modified, ...script }) => script);
+  return { scripts, python: pythonLauncherInstalled() };
+}
+
+// py.exe is what Orbit uses to run .py scripts; it lives in Windows or on PATH.
+function pythonLauncherInstalled() {
+  const candidates = [path.join(process.env.WINDIR || 'C:\\Windows', 'py.exe'), path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Python', 'Launcher', 'py.exe'),
+    ...(process.env.PATH || '').split(path.delimiter).filter(Boolean).map(folder => path.join(folder, 'py.exe'))];
+  return candidates.some(candidate => { try { return fs.statSync(candidate).isFile(); } catch { return false; } });
+}
+
 async function seedFirstRunApps() {
   const snapshot = JSON.stringify(state);
   const found = await appCatalog.findNamed(FIRST_RUN_APPS).catch(() => []);
@@ -510,6 +543,7 @@ function registerIPC() {
   handle('orbit:close-window', () => mainWindow.close());
   handle('orbit:add-wheel-action', addWheelAction);
   handle('orbit:list-folders', listFolders);
+  handle('orbit:list-scripts', listScripts);
   handle('orbit:open-add-dialog', groupPath => {
     if (!Array.isArray(groupPath) || !groupPath.every(id => typeof id === 'string')) throw new Error('Invalid group path.');
     closeWheel(); showMain({ page: 'menus', groupPath, add: true });

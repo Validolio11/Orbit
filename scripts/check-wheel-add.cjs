@@ -1,6 +1,8 @@
 const {_electron}=require('playwright');
 const assert=require('node:assert/strict');
 const path=require('node:path');
+const fs=require('node:fs/promises');
+const os=require('node:os');
 
 // The wheel's "+" slot: adding the program in front, the add-dialog fallback, and the first-run hint.
 (async()=>{
@@ -61,6 +63,25 @@ const path=require('node:path');
     const folder=(await state()).menus[0].items.at(-1);
     assert.equal(folder.kind,'folder');assert.equal(folder.name,'Документи');assert.equal(folder.target,documentsPath);
     console.log('PASS: folder tile adds itself with its name; names do not carry over between types');
+
+    // Script tab: scripts next to an existing script action appear as tiles and a click adds one named after its file.
+    const scriptsDir=await fs.mkdtemp(path.join(os.tmpdir(),'orbit-scripts-'));
+    try{
+      await fs.writeFile(path.join(scriptsDir,'Render scene.ps1'),'Write-Output 1');await fs.writeFile(path.join(scriptsDir,'cleanup.py'),'print(1)');await fs.writeFile(path.join(scriptsDir,'notes.txt'),'x');
+      const seeded=await state();seeded.menus[0].items.push({id:'qa-script',name:'QA script',kind:'script',target:path.join(scriptsDir,'cleanup.py'),args:'',icon:'',children:[]});
+      await page.evaluate(next=>window.orbit.saveState(next),seeded);
+      await page.locator('.panel-head [data-command="add-action"]').click();await form.locator('[data-kind="script"]').click();
+      const render=form.locator('.script-result').filter({hasText:'Render scene'});await render.waitFor();
+      assert.equal(await form.locator('.script-result').filter({hasText:'notes'}).count(),0,'Only runnable scripts are listed');
+      assert.equal(await render.locator('.script-type').textContent(),'PS1');
+      await form.locator('#script-search').fill('clean');
+      assert.equal(await form.locator('.script-result').count(),1,'The filter narrows the tiles');
+      await form.locator('#script-search').fill('');
+      await render.click();await page.waitForSelector('#modal-root:empty',{state:'attached'});
+      const script=(await state()).menus[0].items.at(-1);
+      assert.equal(script.kind,'script');assert.equal(script.name,'Render scene');assert.equal(script.target,path.join(scriptsDir,'Render scene.ps1'));
+      console.log('PASS: script tiles list runnable scripts with their type, filter, and add one named after its file');
+    }finally{await fs.rm(scriptsDir,{recursive:true,force:true});}
     assert.deepEqual(errors,[]);
     console.log('ORBIT_WHEEL_ADD_OK');
   }finally{await app.close();}
