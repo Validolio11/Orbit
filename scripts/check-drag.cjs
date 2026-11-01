@@ -1,0 +1,73 @@
+const {_electron}=require('playwright');
+const assert=require('node:assert/strict');
+const path=require('node:path');
+const fs=require('node:fs/promises');
+
+(async()=>{
+  const project=path.resolve(__dirname,'..'),packaged=process.argv.includes('--packaged');
+  const app=await _electron.launch({args:packaged?['--e2e']:[project,'--e2e'],executablePath:packaged?path.join(project,'dist/Orbit-win32-x64/Orbit.exe'):require('electron'),cwd:project});
+  try{
+    await app.firstWindow();let page;
+    for(let i=0;i<100;i++){page=app.windows().find(w=>w.url().endsWith('/index.html'));if(page)break;await new Promise(resolve=>setTimeout(resolve,50));}
+    assert.ok(page);page.setDefaultTimeout(10000);
+    await page.waitForSelector('html[data-ready="true"]');
+    const errors=[];page.on('pageerror',error=>errors.push(error.message));
+    const fixture=await page.evaluate(async()=>{
+      const state=await window.orbit.getState();
+      const action=(id,name)=>({id,name,kind:'app',target:'C:\\Orbit QA\\'+id+'.exe',args:'--project "test scene"',icon:'app',children:[]});
+      const group=(id,name,children=[])=>({id,name,kind:'group',target:'',args:'',icon:'adobe',children});
+      state.menus=[{id:'drag-menu',name:'Drag QA',icon:'orbit',items:[action('after-effects','After Effects'),action('illustrator','Illustrator'),group('adobe','Adobe'),group('full','Повна група',Array.from({length:12},(_,i)=>action('full-'+i,'Action '+i))),group('tools','Інструменти',[action('nested','Вкладена дія')])]}];
+      state.activeMenuId='drag-menu';await window.orbit.saveState(state);return state;
+    });
+    const row=id=>page.locator(`.action-list [data-row-id="${id}"]`);
+    await row('after-effects').waitFor();
+    const before=structuredClone(fixture.menus[0].items[0]);
+    await row('after-effects').locator('.action-copy').dragTo(row('adobe'));
+    await row('after-effects').waitFor({state:'detached'});
+    assert.equal(await page.getByRole('dialog').count(),0,'Dropping must not open the editor');
+    assert.ok((await row('adobe').locator('.action-desc').textContent()).includes('1 дія'));
+    let saved=await page.evaluate(()=>window.orbit.getState());
+    assert.deepEqual(saved.menus[0].items.find(i=>i.id==='adobe').children,[before]);
+    assert.equal(saved.menus[0].items.filter(i=>i.id==='after-effects').length,0);
+    console.log('PASS: actual mouse drag moves one action into a group without copying or opening editor');
+    await row('illustrator').locator('.action-copy').dragTo(row('adobe'));
+    await row('illustrator').waitFor({state:'detached'});
+    await page.reload();await page.waitForSelector('html[data-ready="true"]');
+    saved=await page.evaluate(()=>window.orbit.getState());
+    assert.deepEqual(saved.menus[0].items.find(i=>i.id==='adobe').children.map(i=>i.id),['after-effects','illustrator']);
+    await row('adobe').getByRole('button',{name:'Відкрити групу Adobe',exact:true}).click();
+    await row('after-effects').waitFor();await row('illustrator').waitFor();
+    assert.equal(await page.locator('#preview-wheel [data-wheel-id]').count(),2);
+    await page.locator('[data-command="group-back"]').click();
+    console.log('PASS: repeated moves append in order, survive reload and appear in nested wheel');
+    // An ordinary click still edits; protected row buttons remain clickable.
+    await row('adobe').click();await page.getByRole('dialog').waitFor();
+    await page.getByRole('dialog').getByRole('button',{name:'Скасувати',exact:true}).click();
+    const beforeInvalid=await page.evaluate(()=>window.orbit.getState());
+    await row('tools').locator('.action-copy').dragTo(row('full'));
+    assert.deepEqual(await page.evaluate(()=>window.orbit.getState()),beforeInvalid);
+    await row('tools').locator('.action-copy').dragTo(row('tools'));
+    assert.deepEqual(await page.evaluate(()=>window.orbit.getState()),beforeInvalid);
+    await row('tools').locator('.action-copy').dragTo(page.locator('.page-header h1'));
+    assert.deepEqual(await page.evaluate(()=>window.orbit.getState()),beforeInvalid);
+    assert.equal(await page.locator('.drop-target,.drop-rejected,.action-dragging').count(),0);
+    console.log('PASS: full group, self-drop and outside-drop do not alter saved actions');
+    const output=path.join(project,'output/playwright');await fs.mkdir(output,{recursive:true});
+    const sourceBox=await row('tools').locator('.action-copy').boundingBox(),targetBox=await row('adobe').boundingBox();
+    await page.mouse.move(sourceBox.x+20,sourceBox.y+10);await page.mouse.down();
+    await page.mouse.move(sourceBox.x+30,sourceBox.y+15,{steps:5});
+    await page.mouse.move(targetBox.x+targetBox.width/2,targetBox.y+targetBox.height/2,{steps:10});
+    await page.mouse.move(targetBox.x+targetBox.width/2+1,targetBox.y+targetBox.height/2);
+    await row('adobe').and(page.locator('.drop-target')).waitFor();
+    assert.equal(await row('adobe').locator('.action-drop-message').textContent(),'Відпустіть, щоб перемістити сюди');
+    await page.screenshot({path:path.join(output,'drag-group-target.png'),timeout:10000});
+    await page.mouse.up();
+    await row('tools').waitFor({state:'detached'});
+    saved=await page.evaluate(()=>window.orbit.getState());
+    assert.equal(saved.menus[0].items.find(i=>i.id==='adobe').children.at(-1).children[0].id,'nested');
+    await page.screenshot({path:path.join(output,'drag-groups-dark.png'),timeout:10000});
+    assert.deepEqual(errors,[]);
+    console.log('PASS: moving a group preserves its children; no renderer errors');
+    console.log('ORBIT_DRAG_OK');
+  }finally{await app.close();}
+})().catch(error=>{console.error(error);process.exitCode=1;});

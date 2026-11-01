@@ -23,6 +23,15 @@ body.overlay{background:transparent!important}.overlay #app{width:600px;height:6
 @media(max-height:800px){.page{padding-top:20px}.breadcrumb{margin-bottom:12px}.page-header{margin-bottom:14px}.menu-tabs{margin-bottom:12px}.action-row{min-height:44px;padding-top:5px;padding-bottom:5px}.preview-surface{height:350px}.preview-surface .wheel-mount{width:min(100%,370px)}.quick-settings{margin-top:12px}.quick-setting{padding-top:10px;padding-bottom:10px}.page-foot{margin-top:12px}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important}}[data-reduced-motion=true] *,[data-reduced-motion=true] *:before,[data-reduced-motion=true] *:after{animation:none!important;transition:none!important}
 .wheel{container-type:inline-size}
+.action-list [draggable=true]{cursor:grab;user-select:none}
+.action-list [draggable=true] button{cursor:pointer}
+.action-list .action-dragging{opacity:.4;cursor:grabbing}
+.action-drop-message{display:none;font-size:10px;line-height:1.5;color:var(--text);margin-top:1px;white-space:normal}
+.action-row.drop-target{background:var(--active);outline:1px solid var(--text);outline-offset:-2px}
+.action-row.drop-rejected{outline:1px dashed var(--faint);outline-offset:-2px}
+.action-row:is(.drop-target,.drop-rejected) .action-desc{display:none}
+.action-row:is(.drop-target,.drop-rejected) .action-drop-message{display:block}
+.action-row.drop-rejected .action-drop-message{color:var(--muted)}
 .overlay #app{width:100vw;height:100vh}
 .wheel-size-control{flex:0 0 240px;min-width:0}
 .wheel-size-slider{display:flex;align-items:center;gap:12px;min-height:28px}

@@ -96,3 +96,10 @@ Remaining hardware validation: press Mouse4/Mouse5 on the user's actual mouse, e
 - Directory replacement uses two renames and preserves a journal and backup. Recovery from sudden power loss between renames may require restoring the preserved `.Orbit-update-backup-*` directory next to the application. It is not a versioned-launcher design.
 - GitHub Actions release run `41339126792` completed successfully and published `v0.1.1`. The same updater downloaded the public release ZIP, verified its GitHub SHA-256 digest and safely prepared the complete real bundle; the unapplied staging files were removed through scoped cleanup. No actual user installation was replaced by this probe.
 - Packaged update UI tests pass. A live packaged UI check against the public feed reports `up-to-date` for `0.1.1`. `scripts/verify-release.cjs` repeats the public download/preparation check and actual UI feed check; `--ui-only` skips downloading.
+
+## Drag actions into groups · 0.1.2
+
+- Native row dragging moves an action to the end of a group's children, removes it from its previous parent and persists through the existing validated save IPC. Names, targets, arguments, icons, IDs, sibling order and nested children are preserved. Group rows display a drop instruction and monochrome border; unavailable targets display the reason. Edit, delete and reorder buttons retain their click behavior.
+- Pure move tests cover regular/nested/cross-menu moves, immutable inputs, missing targets, cycles, full groups and the existing depth limit. `npm test`: 43 tests pass.
+- `npm run test:drag` exercises real mouse dragging, repeated moves, reload persistence, nested wheel contents, no accidental dialog, ordinary editing, full/self/outside rejection, nested-group preservation and target highlight. Existing full UI suite passes when run separately from other mouse-driven sessions. Capture: `output/playwright/drag-group-target.png`.
+- Packaged `0.1.2` passes the same real mouse drag scenario. The release retains the existing update feed and settings schema.
