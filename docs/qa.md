@@ -126,3 +126,13 @@ Remaining hardware validation: press Mouse4/Mouse5 on the user's actual mouse, e
 - Actual mouse scenario `scripts/check-wheel-drag.cjs` passes icon and exposed SVG drags, list/wheel/state order, persistence, group drag without navigation, center moves from depth two to one, empty-group behavior, root/full/outside/Escape cancellation and icon-only shortcut markup. The global launcher is checked separately and remains non-editable. Existing full UI suite also passes.
 - Visual evidence: `output/playwright/wheel-drag-sector-target.png` and `output/playwright/wheel-drag-center-target.png`.
 - Packaged `0.1.5` passes both `test:wheel-drag -- --packaged` and the existing `test:drag -- --packaged` scenarios.
+
+## Group open mode · 0.1.6
+
+- "Відкривати вкладки" adds a hover/click choice for groups. In click mode hovering only highlights a group; a left click opens it. Older configurations migrate to hover. Unit suite: 56 tests pass.
+- The full UI suite currently stops at the keyboard overlay check (`[data-sector="adobe"].selected`); the same failure reproduces on 0.1.5 without this change.
+
+## Updater package validation · 0.1.7
+
+- Inside Electron the patched `fs` reports `resources/app.asar` as a directory, so the updater rejected every valid package with "Пакет Orbit неповний.". The updater now uses `original-fs` under Electron. A staged package with a real `app.asar` fails with the 0.1.6 updater and passes with the fix under `ELECTRON_RUN_AS_NODE`.
+- Installs at 0.1.6 or older carry the faulty check and must install 0.1.7 manually once; later releases update automatically.

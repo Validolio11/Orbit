@@ -1,4 +1,5 @@
-const fsp = require('node:fs/promises');
+// Electron's patched fs treats .asar archives as folders, so update files are handled with original-fs.
+const fsp = process.versions.electron ? require('original-fs').promises : require('node:fs/promises');
 const path = require('node:path');
 const https = require('node:https');
 const { createHash, randomBytes } = require('node:crypto');
