@@ -42,6 +42,8 @@ function validateState(value) {
   if (typeof value.enabled !== 'boolean' || typeof value.reducedMotion !== 'boolean') throw new Error('Invalid preference values.');
   if (value.closeOnOutsideClick !== undefined && typeof value.closeOnOutsideClick !== 'boolean') throw new Error('Invalid outside-click preference.');
   if (value.launchAtLogin !== undefined && typeof value.launchAtLogin !== 'boolean') throw new Error('Invalid start-with-Windows preference.');
+  if (value.wheelAddSlot !== undefined && typeof value.wheelAddSlot !== 'boolean') throw new Error('Invalid wheel add-slot preference.');
+  if (value.introPending !== undefined && typeof value.introPending !== 'boolean') throw new Error('Invalid introduction preference.');
   if (value.wheelSize !== undefined && (!Number.isInteger(value.wheelSize) || value.wheelSize < 312 || value.wheelSize > 780)) throw new Error('Wheel size must be an integer between 312 and 780 DIP.');
   if (!Array.isArray(value.menus) || !value.menus.length || value.menus.length > 20) throw new Error('Create between 1 and 20 menus.');
   const ids = new Set();
@@ -57,7 +59,8 @@ function validateState(value) {
   });
   if (!menus.some(menu => menu.id === value.activeMenuId)) throw new Error('The active menu does not exist.');
   return { version: 1, theme: value.theme, triggerButton: value.triggerButton, activationMode: value.activationMode, groupOpenMode: value.groupOpenMode ?? 'hover',
-    hoverDelay: value.hoverDelay, enabled: value.enabled, reducedMotion: value.reducedMotion, closeOnOutsideClick: value.closeOnOutsideClick ?? true, launchAtLogin: value.launchAtLogin ?? true, wheelSize: value.wheelSize ?? 520, menus, activeMenuId: value.activeMenuId };
+    hoverDelay: value.hoverDelay, enabled: value.enabled, reducedMotion: value.reducedMotion, closeOnOutsideClick: value.closeOnOutsideClick ?? true, launchAtLogin: value.launchAtLogin ?? true,
+    wheelAddSlot: value.wheelAddSlot ?? true, introPending: value.introPending ?? false, wheelSize: value.wheelSize ?? 520, menus, activeMenuId: value.activeMenuId };
 }
 
 function parseArguments(value) {
@@ -123,4 +126,13 @@ function droppedAction(filePath, isDirectory) {
   return null;
 }
 
-module.exports = { droppedAction, validateAction, validateState, parseArguments, wheelGeometry, wheelMountSize, pointIsOutsideWheel, shouldCloseWheelOnClick };
+// Windows shell and Orbit's own processes are never offered as "add the program you are in".
+const SHELL_PROCESSES = new Set(['explorer.exe', 'applicationframehost.exe', 'searchhost.exe', 'searchapp.exe', 'shellexperiencehost.exe',
+  'startmenuexperiencehost.exe', 'textinputhost.exe', 'lockapp.exe', 'systemsettings.exe', 'orbit.input.exe']);
+function foregroundCandidate(exePath, ownExe) {
+  if (typeof exePath !== 'string' || !/^[a-z]:\\.+\.exe$/i.test(exePath) || exePath.length > 1024) return false;
+  if (typeof ownExe === 'string' && exePath.toLowerCase() === ownExe.toLowerCase()) return false;
+  return !SHELL_PROCESSES.has(exePath.split('\\').pop().toLowerCase());
+}
+
+module.exports = { foregroundCandidate, droppedAction, validateAction, validateState, parseArguments, wheelGeometry, wheelMountSize, pointIsOutsideWheel, shouldCloseWheelOnClick };

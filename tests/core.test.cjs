@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { droppedAction, validateState, validateAction, parseArguments, wheelGeometry, wheelMountSize, pointIsOutsideWheel, shouldCloseWheelOnClick } = require('../src/core.cjs');
+const { foregroundCandidate, droppedAction, validateState, validateAction, parseArguments, wheelGeometry, wheelMountSize, pointIsOutsideWheel, shouldCloseWheelOnClick } = require('../src/core.cjs');
 
 const action = (id = 'item', kind = 'app', target = 'C:\\Apps\\Editor.exe') => ({ id, name: 'Дія', kind, target, args: '', icon: 'app', children: [] });
 function configuration() {
@@ -162,4 +162,20 @@ test('dropped Explorer paths become folder, app or script actions and other file
   assert.equal(droppedAction('C:\\Users\\Me\\Desktop\\Figma.lnk', false).kind, 'app');
   assert.deepEqual(droppedAction('D:\\Scripts\\render.ps1', false), { kind: 'script', name: 'render', target: 'D:\\Scripts\\render.ps1' });
   for (const file of ['C:\\Docs\\notes.txt', 'C:\\Media\\clip.mp4', 'C:\\Tools\\README']) assert.equal(droppedAction(file, false), null);
+});
+
+test('only real programs in front are offered to the wheel "+" slot', () => {
+  assert.equal(foregroundCandidate('C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', 'C:\\Orbit\\Orbit.exe'), true);
+  assert.equal(foregroundCandidate('C:\\Orbit\\Orbit.exe', 'c:\\orbit\\orbit.exe'), false);
+  for (const shell of ['C:\\Windows\\explorer.exe', 'C:\\Windows\\System32\\ApplicationFrameHost.exe', 'C:\\Windows\\SystemApps\\SearchHost.exe'])
+    assert.equal(foregroundCandidate(shell, 'C:\\Orbit\\Orbit.exe'), false);
+  for (const value of ['', null, 'chrome.exe', 'C:\\Docs\\file.txt', '\\\\server\\share\\app.exe']) assert.equal(foregroundCandidate(value, 'C:\\Orbit\\Orbit.exe'), false);
+});
+
+test('wheel "+" slot defaults on, first-run hint defaults off for existing settings', () => {
+  const settings = validateState(configuration());
+  assert.equal(settings.wheelAddSlot, true);
+  assert.equal(settings.introPending, false);
+  assert.equal(validateState({ ...configuration(), wheelAddSlot: false, introPending: true }).wheelAddSlot, false);
+  assert.throws(() => validateState({ ...configuration(), introPending: 1 }), /introduction/);
 });

@@ -39,6 +39,11 @@ internal static class MouseHook
     [DllImport("user32.dll")] private static extern bool PostThreadMessage(uint thread, uint message, UIntPtr wParam, IntPtr lParam);
     [DllImport("user32.dll", SetLastError = true)] private static extern uint SendInput(uint count, INPUT[] inputs, int size);
     [DllImport("user32.dll")] private static extern bool LockWorkStation();
+    [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr window, out uint process);
+    [DllImport("kernel32.dll")] private static extern IntPtr OpenProcess(uint access, bool inherit, uint id);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] private static extern bool QueryFullProcessImageName(IntPtr process, int flags, StringBuilder name, ref int size);
+    [DllImport("kernel32.dll")] private static extern bool CloseHandle(IntPtr handle);
     [DllImport("user32.dll")] private static extern bool SetProcessDpiAwarenessContext(IntPtr value);
     [DllImport("kernel32.dll")] private static extern IntPtr GetModuleHandle(string name);
     [DllImport("kernel32.dll")] private static extern uint GetCurrentThreadId();
@@ -70,7 +75,8 @@ internal static class MouseHook
         Hook = SetWindowsHookEx(WH_MOUSE_LL, Callback, GetModuleHandle(null), 0);
         if (Hook == IntPtr.Zero) { Console.Error.WriteLine("Unable to install mouse hook: " + Marshal.GetLastWin32Error()); return 3; }
         var writer = new Thread(WriteEvents); writer.IsBackground = true; writer.Start();
-        var input = new Thread(delegate() { try { while (Console.ReadLine() != null) { RequestStop(); break; } } catch { } RequestStop(); });
+        // "foreground" asks for the program in front (keyboard-opened wheel); any other line stops the hook.
+        var input = new Thread(delegate() { try { string line; while ((line = Console.ReadLine()) != null) { if (line.Trim() == "foreground") { Enqueue("{\"type\":\"foreground\",\"path\":\"" + JsonText(ForegroundPath()) + "\"}"); continue; } RequestStop(); break; } } catch { } RequestStop(); });
         input.IsBackground = true; input.Start();
         Timer watchdog = null;
         if (parentId > 0)
@@ -110,7 +116,9 @@ internal static class MouseHook
             int button = (int)((mouse.mouseData >> 16) & 0xffff) + 3;
             if (button == SelectedButton)
             {
-                Enqueue("{\"type\":\"" + (kind == WM_XBUTTONDOWN ? "down" : "up") + "\",\"x\":" + mouse.pt.x + ",\"y\":" + mouse.pt.y + ",\"button\":" + button + "}");
+                // The program in front is read here, before the wheel can take focus.
+                string foreground = kind == WM_XBUTTONDOWN ? ",\"foreground\":\"" + JsonText(ForegroundPath()) + "\"" : "";
+                Enqueue("{\"type\":\"" + (kind == WM_XBUTTONDOWN ? "down" : "up") + "\",\"x\":" + mouse.pt.x + ",\"y\":" + mouse.pt.y + ",\"button\":" + button + foreground + "}");
                 return true;
             }
         }
@@ -198,6 +206,19 @@ internal static class MouseHook
             if (factory != null) Marshal.ReleaseComObject(factory);
         }
     }
+
+    private static string ForegroundPath()
+    {
+        uint id;
+        GetWindowThreadProcessId(GetForegroundWindow(), out id);
+        if (id == 0) return "";
+        IntPtr process = OpenProcess(0x1000, false, id);
+        if (process == IntPtr.Zero) return "";
+        try { var name = new StringBuilder(1024); int size = name.Capacity; return QueryFullProcessImageName(process, 0, name, ref size) ? name.ToString() : ""; }
+        finally { CloseHandle(process); }
+    }
+
+    private static string JsonText(string value) { return value.Replace("\\", "\\\\").Replace("\"", "\\\""); }
 
     private static int DoAction(string action)
     {

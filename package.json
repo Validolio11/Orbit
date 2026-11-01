@@ -26,7 +26,8 @@
     "test:updater": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-updater.ps1",
     "test:drag": "node scripts/check-drag.cjs",
     "test:icons": "node scripts/check-icons.cjs",
-    "test:wheel-drag": "node scripts/check-wheel-drag.cjs"
+    "test:wheel-drag": "node scripts/check-wheel-drag.cjs",
+    "test:wheel-add": "node scripts/check-wheel-add.cjs"
   },
   "devDependencies": {
     "@electron/packager": "^20.3.0",

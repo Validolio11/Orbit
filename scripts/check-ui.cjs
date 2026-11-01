@@ -114,7 +114,7 @@ const fs = require('node:fs/promises');
     console.log('PASS: nested group, reorder, duplicate nested IDs, delete menu');
 
     await page.locator('[data-page="library"]').click();
-    await page.getByLabel('Знайти дію',{exact:true}).fill('Illustrator');
+    await page.getByLabel('Знайти дію',{exact:true}).fill('Документи');
     assert.equal(await page.locator('.library-list .action-row').count(),1);
     await page.getByLabel('Знайти дію',{exact:true}).fill('no-such-action-123');
     await page.getByText('Дій не знайдено',{exact:true}).waitFor();
@@ -137,6 +137,13 @@ const fs = require('node:fs/promises');
     await page.getByRole('switch',{name:'Зменшити анімації',exact:true}).click();
     await page.getByRole('switch',{name:'Зменшити анімації',exact:true}).click();
     await page.locator('[data-page="menus"]').click();
+    // Fresh profiles get an Adobe group only when Adobe is installed; the overlay checks below need one.
+    saved=await page.evaluate(()=>window.orbit.getState());
+    const mainMenu=saved.menus.find(menu=>menu.id==='main');
+    if(!mainMenu.items.some(item=>item.id==='adobe')){
+      mainMenu.items.unshift({id:'adobe',name:'Adobe',kind:'group',target:'',args:'',icon:'adobe',children:[['illustrator','Illustrator'],['after-effects','After Effects'],['photoshop','Photoshop']].map(([id,name])=>({id,name,kind:'app',target:`C:\\Adobe\\${name}.exe`,args:'',icon:id,children:[]}))});
+      await page.evaluate(next=>window.orbit.saveState(next),saved);
+    }
     await page.getByRole('tab',{name:'Головне меню'}).click();
     await command('preview').click();
     const overlay=app.windows().find(w=>w.url().includes('overlay=1'));overlay.setDefaultTimeout(7000);

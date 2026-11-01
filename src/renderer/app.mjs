@@ -20,6 +20,7 @@ const systemNames={
 const activationNames={release:'Відпускання кнопки',hover:'Наведення курсора',click:'Клацання мишею'};
 const groupOpenNames={hover:'Наведення курсора',click:'Клацання мишею'};
 let state,runtime={hookReady:false,hookError:null,shortcutRegistered:false};
+let wheelForeground=null;
 let updateStatus={phase:'idle',currentVersion:'0.1.1'};
 let page='menus',selectedId='adobe',groupPath=[],search='',toastTimer,modalPreviousFocus,modalCleanup;
 let wheelStack=[],wheelSelected=-1,wheelTrigger='preview',wheelTimer,groupTimer,wheelBusy=false,wheelOpen=false,mousePoint=null,transitionOrigin=null;
@@ -87,9 +88,13 @@ function render(){
   root.querySelectorAll('.action-list [draggable="true"] img').forEach(image=>image.draggable=false);
 }
 
+function introCard(){
+  if(!state.introPending)return '';
+  return `<section class="intro-card" aria-label="Перші кроки">${icon('mouse',22)}<div><strong>Спробуйте зараз: затисніть бічну кнопку ${state.triggerButton} у будь-якій програмі</strong><p>Колесо з’явиться біля курсора. Також працює Ctrl + Space. Сектор «+» на колесі додає програму, в якій ви зараз працюєте.</p></div><button class="btn small" data-command="dismiss-intro">Зрозуміло</button></section>`;
+}
 function menusPage(){
   const menu=currentMenu(),group=currentGroup();
-  return `<div class="page-header"><div><h1>Мої меню</h1><p>Програми, папки та команди — в одному русі.</p></div><div class="header-actions"><button class="btn" data-command="new-menu">${icon('plus',15)}Створити меню</button><button class="btn primary" data-command="preview">${icon('play',14)}Викликати колесо</button></div></div>
+  return `<div class="page-header"><div><h1>Мої меню</h1><p>Програми, папки та команди — в одному русі.</p></div><div class="header-actions"><button class="btn" data-command="new-menu">${icon('plus',15)}Створити меню</button><button class="btn primary" data-command="preview">${icon('play',14)}Викликати колесо</button></div></div>${introCard()}
     <div class="menu-tabs" role="tablist" aria-label="Набори меню">${state.menus.map(m=>`<button class="menu-tab ${m.id===menu.id?'active':''}" data-menu-id="${e(m.id)}" role="tab" aria-selected="${m.id===menu.id}">${icon('wheel',14)}${e(m.name)}<span class="tiny-count">${m.items.length}</span></button>`).join('')}<div class="tabs-extra"><button class="icon-btn" data-command="rename-menu" aria-label="Перейменувати меню">${icon('edit',14)}</button><button class="icon-btn" data-command="duplicate-menu" aria-label="Дублювати меню">${icon('copy',14)}</button>${state.menus.length>1?`<button class="icon-btn danger" data-command="delete-menu" aria-label="Видалити меню">${icon('trash',14)}</button>`:''}</div></div>
     <div class="menu-editor"><section class="panel preview-panel"><div class="panel-head"><h2>Попередній перегляд</h2><span class="micro-label">${group.items.length} / 12</span></div><div class="preview-surface">${groupPath.length?`<button class="btn small preview-back" data-command="group-back">${icon('back',13)}Назад</button>`:''}<div class="wheel-mount" id="preview-wheel"></div><span class="preview-label">${groupPath.length?e(group.name.toUpperCase()):'ORBIT / RADIAL MENU'}</span></div><div class="preview-bottom">${icon('info',15)}<span>Перетягніть сектор, щоб змінити порядок. Центр переносить дію на рівень вище.</span></div></section>
     <section class="panel"><div class="panel-head"><h2>${groupPath.length?e(group.name):'Дії в меню'}</h2><button class="btn small ghost" data-command="add-action" ${group.items.length>=12?'disabled':''}>${icon('plus',13)}Додати</button></div><div class="action-list">${group.items.length?group.items.map((item,i)=>actionRow(item,i)).join(''):`<div class="empty-state">${icon('plus',26)}<strong>Поки що порожньо</strong><p>Додайте програму, папку або команду до цього колеса.</p><button class="btn" data-command="add-action">Додати дію</button></div>`}</div><div class="list-footer"><span>${groupPath.length?'Вкладене меню':'Перетягніть дію на групу, щоб перемістити'}</span><span>${group.items.length} / 12</span></div></section></div>
@@ -111,7 +116,7 @@ function controlsPage(){
     <div class="setting-row"><div class="setting-label"><strong>Запускати разом з Windows</strong><p>Orbit стартує у фоні після входу в систему, тож бічна кнопка працює одразу.</p></div><button class="toggle ${state.launchAtLogin!==false?'on':''}" data-toggle="launchAtLogin" role="switch" aria-checked="${state.launchAtLogin!==false}" aria-label="Запускати разом з Windows"></button></div>
     <div class="setting-row"><div class="setting-label"><strong>Кнопка виклику</strong><p>Затисніть кнопку, щоб відкрити колесо біля курсора.</p></div><select class="select" data-preference="triggerButton" aria-label="Кнопка виклику"><option value="4" ${state.triggerButton===4?'selected':''}>Mouse 4 · назад</option><option value="5" ${state.triggerButton===5?'selected':''}>Mouse 5 · вперед</option></select></div>
     <div class="setting-row"><div class="setting-label"><strong>Клавіатурний виклик</strong><p>${runtime.shortcutRegistered?'Доступний у будь-якій програмі.':runtime.hookError?'Скорочення недоступне: можливо, його зайняла інша програма.':'Додатковий спосіб відкрити колесо.'}</p></div><kbd>Ctrl + Space</kbd></div></section>
-    <section class="settings-section"><div class="section-intro"><h2>Вибір дії</h2><p>Оберіть поведінку, яка підходить вашому робочому процесу.</p></div><div class="setting-row"><div class="setting-label"><strong>Запускати дію</strong><p>${state.activationMode==='release'?'Наведіть на сектор і відпустіть бічну кнопку.':state.activationMode==='hover'?'Затримайте курсор над сектором для запуску.':'Натисніть лівою кнопкою на потрібний сектор.'}</p></div><select class="select" data-preference="activationMode" aria-label="Спосіб запуску">${Object.entries(activationNames).map(([value,label])=>`<option value="${value}" ${state.activationMode===value?'selected':''}>${label}</option>`).join('')}</select></div><div class="setting-row"><div class="setting-label"><strong>Відкривати вкладки</strong><p>${state.groupOpenMode==='click'?'Натисніть лівою кнопкою на вкладку, щоб відкрити її.':'Наведіть курсор на вкладку, щоб відкрити її.'}</p></div><select class="select" data-preference="groupOpenMode" aria-label="Спосіб відкриття вкладок">${Object.entries(groupOpenNames).map(([value,label])=>`<option value="${value}" ${(state.groupOpenMode??'hover')===value?'selected':''}>${label}</option>`).join('')}</select></div>${state.activationMode==='hover'?`<div class="setting-row"><div class="setting-label"><strong>Затримка наведення</strong><p>Збільште, якщо дії запускаються випадково.</p></div><select class="select" data-preference="hoverDelay" aria-label="Затримка наведення">${[150,250,350,500,750,1000,1500,2000].map(v=>`<option value="${v}" ${state.hoverDelay===v?'selected':''}>${v} мс</option>`).join('')}</select></div>`:''}</section>
+    <section class="settings-section"><div class="section-intro"><h2>Вибір дії</h2><p>Оберіть поведінку, яка підходить вашому робочому процесу.</p></div><div class="setting-row"><div class="setting-label"><strong>Запускати дію</strong><p>${state.activationMode==='release'?'Наведіть на сектор і відпустіть бічну кнопку.':state.activationMode==='hover'?'Затримайте курсор над сектором для запуску.':'Натисніть лівою кнопкою на потрібний сектор.'}</p></div><select class="select" data-preference="activationMode" aria-label="Спосіб запуску">${Object.entries(activationNames).map(([value,label])=>`<option value="${value}" ${state.activationMode===value?'selected':''}>${label}</option>`).join('')}</select></div><div class="setting-row"><div class="setting-label"><strong>Сектор «+» на колесі</strong><p>Додає програму, в якій ви працюєте, просто з колеса. Спрацьовує лише клацанням, не наведенням.</p></div><button class="toggle ${state.wheelAddSlot!==false?'on':''}" data-toggle="wheelAddSlot" role="switch" aria-checked="${state.wheelAddSlot!==false}" aria-label="Сектор «+» на колесі"></button></div><div class="setting-row"><div class="setting-label"><strong>Відкривати вкладки</strong><p>${state.groupOpenMode==='click'?'Натисніть лівою кнопкою на вкладку, щоб відкрити її.':'Наведіть курсор на вкладку, щоб відкрити її.'}</p></div><select class="select" data-preference="groupOpenMode" aria-label="Спосіб відкриття вкладок">${Object.entries(groupOpenNames).map(([value,label])=>`<option value="${value}" ${(state.groupOpenMode??'hover')===value?'selected':''}>${label}</option>`).join('')}</select></div>${state.activationMode==='hover'?`<div class="setting-row"><div class="setting-label"><strong>Затримка наведення</strong><p>Збільште, якщо дії запускаються випадково.</p></div><select class="select" data-preference="hoverDelay" aria-label="Затримка наведення">${[150,250,350,500,750,1000,1500,2000].map(v=>`<option value="${v}" ${state.hoverDelay===v?'selected':''}>${v} мс</option>`).join('')}</select></div>`:''}</section>
     <div class="info-box">${icon('info',17)}<span>Вкладені групи відкриваються наведенням. Центр колеса повертає на рівень вище. <kbd>Esc</kbd> закриває колесо. Спеціальні кнопки мишей можуть потребувати налаштування у програмі виробника.</span></div>${runtime.hookError?`<div class="info-box">${icon('info',17)}<span>${e(runtime.hookError)}</span></div>`:''}<button class="btn" data-command="preview">${icon('play',14)}Перевірити колесо</button></div>`;
 }
 function wheelSizeSetting(){
@@ -242,7 +247,7 @@ root.addEventListener('click',async event=>{
   if(button?.dataset.deleteGroup){deleteDialog('action',button.dataset.deleteGroup);return;}
   if(button?.dataset.deleteAction){deleteDialog('action',button.dataset.deleteAction);return;}
   if(button?.dataset.moveId){const next=structuredClone(state),old=state;state=next;const found=locate(button.dataset.moveId),newIndex=found.index+Number(button.dataset.direction);if(newIndex>=0&&newIndex<found.items.length)[found.items[found.index],found.items[newIndex]]=[found.items[newIndex],found.items[found.index]];state=old;await save(next);return;}
-  if(button?.dataset.toggle){const key=button.dataset.toggle;const current=['closeOnOutsideClick','launchAtLogin'].includes(key)?state[key]!==false:state[key];await change({[key]:!current});return;}
+  if(button?.dataset.toggle){const key=button.dataset.toggle;const current=['closeOnOutsideClick','launchAtLogin','wheelAddSlot'].includes(key)?state[key]!==false:state[key];await change({[key]:!current});return;}
   if(button?.dataset.themeValue){await change({theme:button.dataset.themeValue});return;}
   const command=button?.dataset.command;
   if(command){await runCommand(command);return;}
@@ -252,6 +257,7 @@ root.addEventListener('click',async event=>{
 async function runCommand(command){
   try{
     switch(command){
+      case 'dismiss-intro':await change({introPending:false});break;
       case 'minimize':await api.minimize();break;
       case 'maximize':await api.maximize();break;
       case 'close-window':await api.closeWindow();break;
@@ -299,10 +305,24 @@ document.addEventListener('keydown',event=>{
   if(event.key==='Enter'&&event.target.matches('[data-row-id]')){event.preventDefault();activateEditorItem(event.target.dataset.rowId);}
 });
 
-function wheelItems(){return wheelStack.length?wheelStack.at(-1).children:currentMenu().items;}
+const ADD_SLOT={id:'__orbit-add',kind:'add'};
+// Real actions at this wheel level, plus the "+" slot while there is room for it.
+function wheelItems(){const items=wheelStack.length?wheelStack.at(-1).children:currentMenu().items;return state.wheelAddSlot!==false&&items.length&&items.length<12?[...items,ADD_SLOT]:items;}
+function wheelAddItem(){const items=wheelItems();return wheelForeground&&!items.some(item=>item.target===wheelForeground.target)?{kind:'app',name:wheelForeground.name,target:wheelForeground.target,icon:'app'}:null;}
+function restackWheel(){let items=currentMenu().items;const next=[];for(const group of wheelStack){const found=items.find(item=>item.id===group.id&&item.kind==='group');if(!found)break;next.push(found);items=found.children;}wheelStack=next;}
+async function addFromWheel(){
+  clearWheelTimers();
+  const groupPath=wheelStack.map(item=>item.id);
+  if(!wheelAddItem()){wheelOpen=false;await api.openAddDialog(groupPath);return;}
+  wheelBusy=true;
+  try{const result=await api.addWheelAction(groupPath);state=await api.getState();restackWheel();wheelSelected=wheelItems().findIndex(item=>item.id===result.id);drawOverlay();}
+  catch(error){toast(error.message.replace(/^Error invoking remote method '[^']+': (Error: )?/,''),true);}
+  finally{wheelBusy=false;}
+}
 function clearWheelTimers(){clearTimeout(wheelTimer);clearTimeout(groupTimer);wheelTimer=null;groupTimer=null;}
 function drawOverlay(animate=false){
-  const group=wheelStack.at(-1);renderWheel(document.querySelector('#overlay-wheel-content'),wheelItems(),{title:group?group.name:'Orbit',selected:wheelItems()[wheelSelected]?.id,back:!!group});
+  const group=wheelStack.at(-1),entries=wheelItems(),selected=entries[wheelSelected];
+  renderWheel(document.querySelector('#overlay-wheel-content'),entries.filter(item=>item!==ADD_SLOT),{title:group?group.name:'Orbit',selected:selected?.id,back:!!group,addSlot:entries.includes(ADD_SLOT)||(!entries.length&&state.wheelAddSlot!==false),addItem:wheelAddItem(),addSelected:selected===ADD_SLOT});
   hydrateAppIcons(document.querySelector('#overlay-wheel'));
   if(animate&&!state.reducedMotion){const w=document.querySelector('.wheel');w.classList.add('wheel-appear');}
 }
@@ -311,7 +331,9 @@ function selectWheel(index,keyboard=false){
   const items=wheelItems(),selected=items[index];
   document.querySelectorAll('[data-sector]').forEach(node=>node.classList.toggle('selected',node.dataset.sector===selected?.id));
   document.querySelectorAll('[data-wheel-id]').forEach(node=>node.classList.toggle('selected',node.dataset.wheelId===selected?.id));
-  if(!selected||keyboard||wheelBusy)return;
+  document.querySelectorAll('[data-add-slot]').forEach(node=>node.classList.toggle('selected',selected===ADD_SLOT));
+  // The "+" slot never activates by hovering, only by an explicit click, Enter or release.
+  if(!selected||selected===ADD_SLOT||keyboard||wheelBusy)return;
   if(selected.kind==='group'){if(state.groupOpenMode!=='click')groupTimer=setTimeout(()=>openWheelGroup(selected),300);}
   else if(state.activationMode==='hover'&&wheelTrigger==='mouse')wheelTimer=setTimeout(()=>commitWheel(),state.hoverDelay);
 }
@@ -320,13 +342,14 @@ function openWheelGroup(item){
 }
 function wheelBack(){if(!wheelStack.length)return;clearWheelTimers();wheelStack.pop();wheelSelected=-1;transitionOrigin=mousePoint?{...mousePoint}:null;drawOverlay();}
 async function commitWheel(){
-  const item=wheelItems()[wheelSelected];if(!item||wheelBusy||!wheelOpen)return;if(item.kind==='group'){openWheelGroup(item);return;}
+  const item=wheelItems()[wheelSelected];if(!item||wheelBusy||!wheelOpen)return;if(item.kind==='group'){openWheelGroup(item);return;}if(item===ADD_SLOT){await addFromWheel();return;}
   clearWheelTimers();wheelBusy=true;wheelOpen=false;
   try{await api.closeWheel();const result=await api.executeAction(item);if(!result.ok){toast(result.error||'Не вдалося виконати дію',true);}}catch(error){toast(error.message,true);}finally{wheelBusy=false;}
 }
 function initOverlay(){
   document.body.classList.add('overlay');root.innerHTML='<div class="overlay-wheel" id="overlay-wheel"><div class="overlay-wheel-content" id="overlay-wheel-content"></div></div>';
-  api.onWheelOpen(payload=>{clearWheelTimers();wheelTrigger=payload.trigger;wheelStack=[];wheelSelected=-1;wheelBusy=false;wheelOpen=true;mousePoint=null;transitionOrigin=null;const center=payload.center||{x:innerWidth/2,y:innerHeight/2};const mount=document.querySelector('#overlay-wheel');const size=payload.size??Math.min(state.wheelSize??520,innerWidth-30,innerHeight-60);mount.style.width=size+'px';mount.style.height=size+'px';mount.style.setProperty('--wheel-scale',size/520);mount.style.left=(center.x-size/2)+'px';mount.style.top=(center.y-size/2)+'px';drawOverlay(true);});
+  api.onWheelForeground?.(next=>{wheelForeground=next;if(wheelOpen&&wheelItems().includes(ADD_SLOT))drawOverlay();});
+  api.onWheelOpen(payload=>{clearWheelTimers();wheelForeground=null;wheelTrigger=payload.trigger;wheelStack=[];wheelSelected=-1;wheelBusy=false;wheelOpen=true;mousePoint=null;transitionOrigin=null;const center=payload.center||{x:innerWidth/2,y:innerHeight/2};const mount=document.querySelector('#overlay-wheel');const size=payload.size??Math.min(state.wheelSize??520,innerWidth-30,innerHeight-60);mount.style.width=size+'px';mount.style.height=size+'px';mount.style.setProperty('--wheel-scale',size/520);mount.style.left=(center.x-size/2)+'px';mount.style.top=(center.y-size/2)+'px';drawOverlay(true);});
   api.onWheelClosed?.(()=>{clearWheelTimers();wheelOpen=false;wheelSelected=-1;});
   api.onTriggerRelease(()=>{if(!wheelOpen||wheelTrigger!=='mouse'||state.activationMode!=='release')return;if(wheelSelected>=0&&wheelItems()[wheelSelected]?.kind!=='group')commitWheel();else if(!wheelStack.length){clearWheelTimers();wheelOpen=false;api.closeWheel();}});
   root.addEventListener('pointerdown',event=>{
@@ -341,16 +364,23 @@ function initOverlay(){
     const bounds=document.querySelector('#overlay-wheel').getBoundingClientRect(),scale=bounds.width/480;
     selectWheel(sectorAt((event.clientX-bounds.left-bounds.width/2)/scale,(event.clientY-bounds.top-bounds.height/2)/scale,wheelItems().length,88,225));
   });
-  root.addEventListener('click',event=>{const itemButton=event.target.closest('[data-wheel-id]'),sector=event.target.closest('[data-sector]');if(event.target.closest('[data-wheel-back]')){wheelBack();return;}if(itemButton||sector){const id=itemButton?.dataset.wheelId||sector.dataset.sector;wheelSelected=wheelItems().findIndex(i=>i.id===id);commitWheel();}});
+  root.addEventListener('click',event=>{const itemButton=event.target.closest('[data-wheel-id]'),sector=event.target.closest('[data-sector]');if(event.target.closest('[data-wheel-back]')){wheelBack();return;}if(event.target.closest('[data-add-slot]')){wheelSelected=wheelItems().indexOf(ADD_SLOT);if(wheelSelected<0&&!wheelItems().length){wheelOpen=false;api.openAddDialog(wheelStack.map(item=>item.id));return;}commitWheel();return;}if(itemButton||sector){const id=itemButton?.dataset.wheelId||sector.dataset.sector;wheelSelected=wheelItems().findIndex(i=>i.id===id);commitWheel();}});
 }
 
 async function init(){
   if(!api){root.innerHTML='<div class="empty-state"><h1>Orbit</h1><p>Відкрийте застосунок через Orbit.exe або npm start.</p></div>';return;}
   state=await api.getState();runtime=await api.getRuntime();updateStatus=await api.getUpdateStatus();applyTheme();
   api.onUpdateStatus(next=>{updateStatus=next;if(!overlay)refreshUpdates(next);});
-  api.onStateChanged(next=>{state=next;applyTheme();if(!overlay)render();else if(wheelOpen){clearWheelTimers();wheelStack=[];wheelSelected=-1;drawOverlay();}});
+  api.onStateChanged(next=>{state=next;applyTheme();if(!overlay)render();else if(wheelOpen&&!wheelBusy){clearWheelTimers();restackWheel();wheelSelected=-1;drawOverlay();}});
   api.onRuntimeChanged(next=>{runtime=next;if(!overlay)render();});
-  api.onNavigate(next=>{if(['menus','library','controls','settings'].includes(next)){page=next;render();}});
+  api.onNavigate(next=>{
+    const target=typeof next==='string'?{page:next}:next||{};
+    if(!['menus','library','controls','settings'].includes(target.page))return;
+    page=target.page;
+    if(Array.isArray(target.groupPath)){groupPath=target.groupPath.filter(id=>typeof id==='string');selectedId='';}
+    closeModal?.();render();
+    if(target.add)actionDialog();
+  });
   api.onActionError?.(({error,actionId})=>{if(!overlay){selectedId=actionId;render();toast(error,true);}});
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>{if(state.theme==='system'){applyTheme();if(!overlay)render();}});
   if(overlay)initOverlay();else render();

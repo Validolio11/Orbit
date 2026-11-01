@@ -4,18 +4,25 @@ const fsp = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
 const { spawn, execFile } = require('node:child_process');
+const { randomUUID } = require('node:crypto');
 
 const SMOKE = process.argv.includes('--smoke-test');
 const E2E = process.argv.includes('--e2e');
 const ISOLATED = SMOKE || E2E;
 // Windows starts Orbit with this flag at sign-in; it then waits in the tray without opening its window.
 const HIDDEN = process.argv.includes('--hidden');
+// Popular programs added to a brand-new wheel when they are installed.
+const FIRST_RUN_APPS = ['Google Chrome', 'Microsoft Edge', 'Firefox', 'Telegram', 'Visual Studio Code', 'Figma', 'Spotify', 'Discord', 'Notion', 'Slack',
+  'Microsoft Word', 'Microsoft Excel', 'Zoom', 'Steam', 'Blender', 'OBS Studio'];
+let firstRun = false;
+// The program that was in front when the wheel opened; the wheel's "+" adds it.
+let wheelForeground = null;
 const NATIVE = app.isPackaged && __dirname.includes('app.asar')
   ? path.join(process.resourcesPath, 'app.asar.unpacked', 'native', 'Orbit.Input.exe')
   : path.join(__dirname, '..', 'native', 'Orbit.Input.exe');
 const PAGE = path.join(__dirname, 'renderer', 'index.html');
 const APP_ICON = path.join(__dirname, '..', 'assets', 'orbit.ico');
-const { droppedAction, validateAction, validateState, parseArguments, wheelGeometry, wheelMountSize, shouldCloseWheelOnClick } = require('./core.cjs');
+const { foregroundCandidate, droppedAction, validateAction, validateState, parseArguments, wheelGeometry, wheelMountSize, shouldCloseWheelOnClick } = require('./core.cjs');
 const { createAppCatalog, validatePackagedTarget, isLocalAppPath } = require('./app-catalog.cjs');
 const { createUpdater } = require('./updater.cjs');
 const UPDATE_REPOSITORY = 'Validolio11/Orbit';
@@ -102,13 +109,16 @@ function adobeExecutable(product, executable) {
 
 function defaultState() {
   const action = (id, name, kind, target, icon, children = []) => ({ id, name, kind, target, args: '', icon, children });
-  return { version: 1, theme: 'dark', triggerButton: 4, activationMode: 'hover', groupOpenMode: 'hover', hoverDelay: 350, enabled: true, reducedMotion: false, closeOnOutsideClick: true, launchAtLogin: true, wheelSize: 520,
+  // Only installed Adobe apps are offered, so a fresh wheel never starts with broken actions.
+  const adobe = [
+    action('illustrator', 'Illustrator', 'app', adobeExecutable('Adobe Illustrator', 'Illustrator.exe'), 'illustrator'),
+    action('after-effects', 'After Effects', 'app', adobeExecutable('Adobe After Effects', 'AfterFX.exe'), 'after-effects'),
+    action('photoshop', 'Photoshop', 'app', adobeExecutable('Adobe Photoshop', 'Photoshop.exe'), 'photoshop'),
+  ].filter(item => item.target);
+  return { version: 1, theme: 'dark', triggerButton: 4, activationMode: 'hover', groupOpenMode: 'hover', hoverDelay: 350, enabled: true, reducedMotion: false, closeOnOutsideClick: true, launchAtLogin: true,
+    wheelAddSlot: true, introPending: true, wheelSize: 520,
     activeMenuId: 'main', menus: [{ id: 'main', name: 'Головне меню', icon: 'orbit', items: [
-      action('adobe', 'Adobe', 'group', '', 'adobe', [
-        action('illustrator', 'Illustrator', 'app', adobeExecutable('Adobe Illustrator', 'Illustrator.exe'), 'illustrator'),
-        action('after-effects', 'After Effects', 'app', adobeExecutable('Adobe After Effects', 'AfterFX.exe'), 'after-effects'),
-        action('photoshop', 'Photoshop', 'app', adobeExecutable('Adobe Photoshop', 'Photoshop.exe'), 'photoshop'),
-      ]),
+      ...(adobe.length ? [action('adobe', 'Adobe', 'group', '', 'adobe', adobe)] : []),
       action('documents', 'Документи', 'folder', app.getPath('documents'), 'folder'),
       action('browser', 'Вебпошук', 'app', 'https://www.google.com', 'globe'),
       action('explorer', 'Провідник', 'system', 'explorer', 'files'),
@@ -123,6 +133,7 @@ async function loadState() {
   try { return validateState(JSON.parse(await fsp.readFile(statePath, 'utf8'))); }
   catch (error) {
     if (error.code !== 'ENOENT') console.warn('Orbit: configuration could not be loaded; using defaults.', error.message);
+    else firstRun = true;
     return defaultState();
   }
 }
@@ -206,9 +217,55 @@ function reportStartupError(error) {
   if (!ISOLATED) dialog.showErrorBox('Orbit', `Не вдалося відкрити інтерфейс: ${error.message}`);
 }
 
+async function resolveForeground(exePath, session) {
+  if (session !== wheelSession || !foregroundCandidate(exePath, process.execPath)) return;
+  const match = await appCatalog.findExecutable(exePath).catch(() => null);
+  if (session !== wheelSession) return;
+  // Store apps cannot be started from their WindowsApps executable, only through their catalog entry.
+  if (!match && /\\WindowsApps\\/i.test(exePath)) return;
+  const base = path.basename(exePath, path.extname(exePath));
+  wheelForeground = match || { name: base.charAt(0).toUpperCase() + base.slice(1), target: exePath, args: '' };
+  if (overlayWindow && !overlayWindow.isDestroyed()) overlayWindow.webContents.send('orbit:wheel-foreground', wheelForeground);
+}
+
+function wheelGroup(menu, groupPath) {
+  let items = menu.items;
+  for (const id of groupPath) {
+    const group = items.find(item => item.id === id && item.kind === 'group');
+    if (!group) throw new Error('Групу не знайдено.');
+    items = group.children;
+  }
+  return items;
+}
+
+async function addWheelAction(groupPath) {
+  if (!Array.isArray(groupPath) || groupPath.length > 20 || !groupPath.every(id => typeof id === 'string')) throw new Error('Invalid group path.');
+  if (!wheelForeground) throw new Error('Не вдалося визначити програму.');
+  const next = structuredClone(state), items = wheelGroup(next.menus.find(menu => menu.id === next.activeMenuId), groupPath);
+  if (items.length >= 12) throw new Error('У цьому колесі вже 12 дій.');
+  const action = { id: randomUUID(), name: wheelForeground.name, kind: 'app', target: wheelForeground.target, args: wheelForeground.args || '', icon: 'app', children: [] };
+  items.push(action);
+  await saveState(next);
+  return { ok: true, id: action.id, name: action.name };
+}
+
+async function seedFirstRunApps() {
+  const snapshot = JSON.stringify(state);
+  const found = await appCatalog.findNamed(FIRST_RUN_APPS).catch(() => []);
+  if (!found.length || JSON.stringify(state) !== snapshot) return;
+  const next = structuredClone(state), items = next.menus[0].items;
+  // Leave one free slot so the wheel's "+" stays available.
+  for (const entry of found.slice(0, Math.max(0, 11 - items.length)).reverse()) {
+    items.unshift({ id: randomUUID(), name: entry.name, kind: 'app', target: entry.target, args: entry.args || '', icon: 'app', children: [] });
+  }
+  if (JSON.stringify(state) === snapshot) await saveState(next).catch(() => {});
+}
+
 async function showWheel(physicalPoint, trigger = 'preview') {
   if (!overlayWindow || overlayWindow.isDestroyed()) return { ok: false, error: 'Wheel unavailable.' };
   const session = ++wheelSession;
+  wheelForeground = null;
+  if (trigger !== 'preview' && state.introPending) saveState({ ...state, introPending: false }).catch(() => {});
   pendingMouseOpen = trigger === 'mouse';
   pendingMouseRelease = null;
   const point = physicalPoint ? screen.screenToDipPoint(physicalPoint) : screen.getCursorScreenPoint();
@@ -258,7 +315,11 @@ function startHook() {
       try { event = JSON.parse(line); } catch { continue; }
       if (hookProcess !== child) continue;
       if (event.type === 'ready') updateRuntime({ hookReady: state.enabled && event.button === state.triggerButton, outsideWatcherReady: true, hookError: null });
-      else if (event.type === 'down' && state.enabled) showWheel({ x: event.x, y: event.y }, 'mouse').catch(error => updateRuntime({ hookError: error.message }));
+      else if (event.type === 'down' && state.enabled) {
+        showWheel({ x: event.x, y: event.y }, 'mouse').catch(error => updateRuntime({ hookError: error.message }));
+        resolveForeground(event.foreground, wheelSession).catch(() => {});
+      }
+      else if (event.type === 'foreground' && wheelVisible) resolveForeground(event.path, wheelSession).catch(() => {});
       else if (event.type === 'click' && wheelVisible && state.closeOnOutsideClick && overlayWindow && !overlayWindow.isDestroyed()) {
         if (Number.isFinite(event.x) && Number.isFinite(event.y)) {
           const point = screen.screenToDipPoint({ x: event.x, y: event.y });
@@ -394,6 +455,11 @@ function registerIPC() {
   handle('orbit:minimize', () => mainWindow.minimize());
   handle('orbit:maximize', () => mainWindow.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize());
   handle('orbit:close-window', () => mainWindow.close());
+  handle('orbit:add-wheel-action', addWheelAction);
+  handle('orbit:open-add-dialog', groupPath => {
+    if (!Array.isArray(groupPath) || !groupPath.every(id => typeof id === 'string')) throw new Error('Invalid group path.');
+    closeWheel(); showMain({ page: 'menus', groupPath, add: true });
+  });
   handle('orbit:inspect-dropped', async paths => {
     if (!Array.isArray(paths) || paths.length > 50) throw new Error('Invalid dropped files.');
     const actions = [];
@@ -441,6 +507,9 @@ function updateTray() {
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Відкрити Orbit', click: () => showMain() },
     { label: 'Показати колесо', click: () => showWheel().catch(console.error) },
+    { label: 'Додати дію…', click: () => showMain({ page: 'menus', groupPath: [], add: true }) },
+    ...(state.menus.length > 1 ? [{ label: 'Меню на колесі', submenu: state.menus.map(menu => ({ label: menu.name, type: 'radio', checked: menu.id === state.activeMenuId,
+      click: () => saveState({ ...state, activeMenuId: menu.id }).catch(console.error) })) }] : []),
     { label: 'Увімкнено', type: 'checkbox', checked: state.enabled, click: item => saveState({ ...state, enabled: item.checked }).catch(console.error) },
     { type: 'separator' }, { label: 'Вийти з Orbit', click: () => app.quit() },
   ]));
@@ -448,7 +517,7 @@ function updateTray() {
 
 function createTray() {
   tray = new Tray(nativeImage.createFromPath(APP_ICON));
-  tray.on('double-click', () => showMain());
+  tray.on('click', () => showMain());
   updateTray();
 }
 
@@ -509,9 +578,15 @@ else {
     registerIPC(); await createWindows();
     if (SMOKE) { await smokeTest(); app.quit(); return; }
     appCatalog.warm();
-    if (E2E) return;
+    if (E2E) { globalThis.__orbitE2E = { resolveForeground: exePath => resolveForeground(exePath, wheelSession) }; return; }
     createTray();
-    updateRuntime({ shortcutRegistered: globalShortcut.register('Control+Space', () => wheelVisible ? closeWheel() : showWheel().catch(console.error)) });
+    if (firstRun) seedFirstRunApps().catch(() => {});
+    updateRuntime({ shortcutRegistered: globalShortcut.register('Control+Space', () => {
+      if (wheelVisible) { closeWheel(); return; }
+      // Ask the hook which program is in front before the keyboard-opened wheel takes focus.
+      try { hookProcess?.stdin.write('foreground\n'); } catch { }
+      showWheel(undefined, 'keyboard').catch(console.error);
+    }) });
     startHook();
     // Wait until a just-finished update helper has exited before removing its files.
     if (app.isPackaged) setTimeout(() => updater.cleanup().catch(() => {}), 30000);

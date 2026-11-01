@@ -165,6 +165,25 @@ function createAppCatalog({ discover = discoverWindowsApps, loadIcon = async () 
       return error ? { ...result, error } : result;
     },
     getAppIcon,
+    // Matches a running executable to its catalog entry so the action keeps the shortcut's name and arguments.
+    async findExecutable(target) {
+      if (disposed || !isLocalAppPath(target)) return null;
+      await ensureIndex();
+      const key = targetKey(target), entry = (entries || []).find(item => targetKey(item._resolvedTarget) === key);
+      return entry ? { name: entry.name, target: entry.target, args: entry.args } : null;
+    },
+    // First catalog entry whose name equals or starts with each wanted name, in the given order.
+    async findNamed(names) {
+      if (disposed) return [];
+      await ensureIndex();
+      const found = [], keys = new Set();
+      for (const wanted of names) {
+        const query = normalizeQuery(wanted);
+        const entry = (entries || []).find(item => !keys.has(item._key) && (normalizeQuery(item.name) === query || normalizeQuery(item.name).startsWith(query + ' ')));
+        if (entry) { keys.add(entry._key); found.push({ name: entry.name, target: entry.target, args: entry.args }); }
+      }
+      return found;
+    },
     dispose() { disposed = true; controller?.abort(); icons.clear(); },
   };
 }

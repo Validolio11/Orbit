@@ -145,3 +145,18 @@ test('cached apps are returned while background refresh is pending', async () =>
     assert.equal((await catalog.searchApps('new')).total, 1);
   } finally { catalog.dispose(); await fsp.unlink(file).catch(() => {}); await fsp.unlink(file + '.tmp').catch(() => {}); await fsp.rmdir(directory); }
 });
+
+test('catalog finds the shortcut behind a running executable and popular apps by name', async () => {
+  const rows = [
+    app('Google Chrome', 'C:\\Start Menu\\Google Chrome.lnk', 'start-menu', { resolvedTarget: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', resolvedArgs: '' }),
+    app('Telegram Desktop', 'C:\\Users\\Me\\AppData\\Roaming\\Telegram Desktop\\Telegram.exe'),
+    app('Visual Studio Code', 'C:\\Start Menu\\Visual Studio Code.lnk', 'start-menu', { resolvedTarget: 'C:\\VS Code\\Code.exe', resolvedArgs: '' }),
+  ];
+  const catalog = createAppCatalog({ discover: async () => rows });
+  const chrome = await catalog.findExecutable('c:\\program files\\google\\chrome\\application\\CHROME.EXE');
+  assert.deepEqual(chrome, { name: 'Google Chrome', target: 'C:\\Start Menu\\Google Chrome.lnk', args: '' });
+  assert.equal(await catalog.findExecutable('C:\\Other\\unknown.exe'), null);
+  const named = await catalog.findNamed(['Firefox', 'Telegram', 'Visual Studio Code', 'Google Chrome']);
+  assert.deepEqual(named.map(entry => entry.name), ['Telegram Desktop', 'Visual Studio Code', 'Google Chrome']);
+  catalog.dispose();
+});
