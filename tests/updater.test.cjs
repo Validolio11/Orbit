@@ -124,6 +124,16 @@ test('installer arms only after helper readiness and saved state; app shutdown p
   assert.ok(installLaunch.args.includes('-Detach'));assert.ok(!installLaunch.options.detached,'PowerShell exits without running when spawned detached');
 });
 
+test('a failed install written by the helper after Orbit closed is reported on the next start',async t=>{
+  const {updater,updates,statuses}=await fixture(t);
+  const work=path.join(updates,'a'.repeat(32));await fs.mkdir(work,{recursive:true});
+  await fs.writeFile(path.join(work,'journal.json'),JSON.stringify({phase:'old-moved',version:'0.2.0'}));
+  await fs.writeFile(path.join(work,'result.json'),JSON.stringify({ok:false,error:'The new Orbit version failed its startup check.',rolledBack:true}));
+  const reported=await updater.reportFailedInstall();
+  assert.equal(reported.phase,'error');assert.match(reported.message,/0\.2\.0.*попередній версії/);
+  assert.equal(statuses.at(-1).phase,'error');
+});
+
 test('cleanup removes finished and abandoned update files but keeps an interrupted install for recovery',async t=>{
   const {updater,root,updates}=await fixture(t);
   const id=n=>String(n).repeat(32);

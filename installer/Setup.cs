@@ -165,6 +165,10 @@ static class Setup
         if (Directory.Exists(target) && Directory.EnumerateFileSystemEntries(target).Any() && !IsOrbitFolder(target))
             throw new InvalidOperationException("Папка " + target + " не порожня й не містить Orbit.");
         Directory.CreateDirectory(parent);
+        foreach (string leftover in Directory.GetDirectories(parent, ".Orbit-old-*").Concat(Directory.GetDirectories(parent, ".Orbit-new-*")))
+        {
+            try { Directory.Delete(leftover, true); } catch (Exception error) { Log("Leftover not removed: " + leftover + ": " + error.Message); }
+        }
         string id = Guid.NewGuid().ToString("N").Substring(0, 12), stage = Path.Combine(parent, ".Orbit-new-" + id), old = Path.Combine(parent, ".Orbit-old-" + id);
         string stageRoot = Path.GetFullPath(stage) + Path.DirectorySeparatorChar;
         try
@@ -187,14 +191,16 @@ static class Setup
             bool moved = false;
             if (Directory.Exists(target)) { Retry(() => Directory.Move(target, old)); moved = true; }
             try { Retry(() => Directory.Move(stage, target)); }
-            catch { if (moved) Directory.Move(old, target); throw; }
+            catch
+            {
+                if (moved) { try { Retry(() => Directory.Move(old, target)); } catch (Exception restore) { Log("Previous Orbit not restored from " + old + ": " + restore.Message); } }
+                throw;
+            }
             // Files of just-stopped processes can stay locked for a moment.
             if (moved) { try { Retry(() => Directory.Delete(old, true)); } catch { } }
             progress(95);
             if (register)
             {
-                CreateShortcut(StartMenuShortcut, target);
-                CreateShortcut(DesktopShortcut, target);
                 Directory.CreateDirectory(Path.GetDirectoryName(UninstallerPath));
                 using (var source = Resource("Uninstall.exe")) using (var output = File.Create(UninstallerPath)) source.CopyTo(output);
                 using (var key = Registry.CurrentUser.CreateSubKey(UninstallKey))
@@ -208,6 +214,10 @@ static class Setup
                     key.SetValue("QuietUninstallString", "\"" + UninstallerPath + "\" /silent");
                     key.SetValue("NoModify", 1, RegistryValueKind.DWord);
                     key.SetValue("NoRepair", 1, RegistryValueKind.DWord);
+                }
+                foreach (string link in new[] { StartMenuShortcut, DesktopShortcut })
+                {
+                    try { CreateShortcut(link, target); } catch (Exception error) { Log("Shortcut not created: " + link + ": " + error.Message); }
                 }
             }
             progress(100);
@@ -281,8 +291,8 @@ static class Setup
         try { Registry.CurrentUser.DeleteSubKeyTree(UninstallKey, false); } catch { }
         // The running uninstaller removes itself once it has exited.
         string self = Application.ExecutablePath, folder = Path.GetDirectoryName(self);
-        Process.Start(new ProcessStartInfo("cmd.exe", "/c ping 127.0.0.1 -n 3 >nul & del /f /q \"" + self + "\" & rmdir \"" + folder + "\"") { CreateNoWindow = true, UseShellExecute = false, WindowStyle = ProcessWindowStyle.Hidden });
         if (!silent) MessageBox.Show("Orbit видалено.", "Orbit", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        Process.Start(new ProcessStartInfo("cmd.exe", "/c for /l %i in (1,1,30) do (ping 127.0.0.1 -n 2 >nul & del /f /q \"" + self + "\" 2>nul & if not exist \"" + self + "\" (rmdir \"" + folder + "\" 2>nul & exit))") { CreateNoWindow = true, UseShellExecute = false, WindowStyle = ProcessWindowStyle.Hidden });
         return 0;
     }
 #endif

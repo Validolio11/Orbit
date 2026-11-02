@@ -30,6 +30,10 @@ let wheelStack=[],wheelSelected=-1,wheelTrigger='preview',wheelTimer,groupTimer,
 const uuid=()=>crypto.randomUUID();
 const actionsWord=count=>count%10===1&&count%100!==11?'дію':[2,3,4].includes(count%10)&&![12,13,14].includes(count%100)?'дії':'дій';
 const currentMenu=()=>state.menus.find(m=>m.id===state.activeMenuId)||state.menus[0];
+// validateAction allows four nested levels; a group's children must fit below the level it is created on.
+const MAX_GROUP_DEPTH=4;
+function groupHeight(item){return item.kind==='group'?1+Math.max(0,...item.children.map(groupHeight)):0;}
+function trimGroupPath(){let items=currentMenu().items;const next=[];for(const id of groupPath){const group=items.find(item=>item.id===id&&item.kind==='group');if(!group)break;next.push(id);items=group.children;}groupPath=next;}
 function currentGroup(){let value={items:currentMenu().items,name:currentMenu().name};for(const id of groupPath){const item=value.items.find(i=>i.id===id);if(!item||item.kind!=='group')break;value={...item,items:item.children};}return value;}
 function locate(id){for(const menu of state.menus){const walk=(items,path=[])=>{for(let i=0;i<items.length;i++){if(items[i].id===id)return {item:items[i],items,index:i,menu,path};if(items[i].kind==='group'){const found=walk(items[i].children,[...path,items[i].id]);if(found)return found;}}};const found=walk(menu.items);if(found)return found;}return null;}
 function flatten(){const result=[];for(const menu of state.menus){const walk=(items,path=[])=>items.forEach(item=>{result.push({item,menu,path});if(item.kind==='group')walk(item.children,[...path,item.name]);});walk(menu.items);}return result;}
@@ -153,7 +157,7 @@ function modal(title,body,footer,reuseAction=false){
   });
 }
 function menuDialog(mode='new'){
-  const menu=currentMenu();modal(mode==='rename'?'Перейменувати меню':'Нове меню',`<form id="menu-form" class="modal-body"><div class="field"><label for="menu-name">Назва меню</label><input id="menu-name" name="name" maxlength="100" required placeholder="Наприклад, Монтаж" value="${mode==='rename'?e(menu.name):''}"><small>Окремий набір дій.</small></div><p class="form-error" id="form-error"></p></form>`,`<button class="btn" data-command="dismiss">Скасувати</button><button class="btn primary" type="submit" form="menu-form">${mode==='rename'?'Зберегти':'Створити меню'}</button>`);
+  const menu=currentMenu();modal(mode==='rename'?'Перейменувати меню':'Нове меню',`<form id="menu-form" class="modal-body"><div class="field"><label for="menu-name">Назва меню</label><input id="menu-name" name="name" maxlength="100" required placeholder="Наприклад, Монтаж" value="${mode==='rename'?e(menu.name):''}"><small>Окремий набір дій.</small></div><p class="form-error" id="form-error" role="alert"></p></form>`,`<button class="btn" data-command="dismiss">Скасувати</button><button class="btn primary" type="submit" form="menu-form">${mode==='rename'?'Зберегти':'Створити меню'}</button>`);
   document.querySelector('#menu-form').onsubmit=async event=>{event.preventDefault();const name=new FormData(event.target).get('name').trim();if(!name)return;const next=structuredClone(state);if(mode==='rename')next.menus.find(m=>m.id===menu.id).name=name;else{if(next.menus.length>=20){document.querySelector('#form-error').textContent='Можна створити до 20 меню.';return;}const id=uuid();next.menus.push({id,name,icon:'orbit',items:[]});next.activeMenuId=id;groupPath=[];}if(await save(next,mode==='rename'?'Назву збережено':'Меню створено'))closeModal();};
 }
 function deleteDialog(type,id){const item=type==='menu'?currentMenu():locate(id)?.item;if(!item)return;modal(type==='menu'?'Видалити меню?':'Видалити дію?',`<div class="modal-body"><p class="delete-copy">Видалити <strong>${e(item.name)}</strong>${item.kind==='group'||type==='menu'?' разом із вкладеними діями':''}? Файли та програми на комп’ютері залишаться на місці.</p></div>`,`<button class="btn" data-command="dismiss">Скасувати</button><button class="btn danger" id="confirm-delete">${icon('trash',14)}Видалити</button>`);document.querySelector('#confirm-delete').onclick=async()=>{const next=structuredClone(state);if(type==='menu'){next.menus=next.menus.filter(m=>m.id!==item.id);next.activeMenuId=next.menus[0].id;groupPath=[];}else{const old=state;state=next;const found=locate(id);found.items.splice(found.index,1);state=old;}if(await save(next,'Видалено'))closeModal();};}
@@ -167,13 +171,13 @@ function actionDialog(id){
   let nameTyped=!!existing;
   const parentGroup=currentGroup();if(!existing&&parentGroup.items.length>=12){toast('У цьому колесі вже 12 дій. Створіть групу або інше меню.',true);return;}
   function draw(){
-    const targetField=draft.kind==='app'?appPickerFields(draft,pickerConfig):draft.kind==='folder'?folderPickerFields(draft,pickerConfig):draft.kind==='group'?groupPickerFields(draft,pickerConfig,existing?[]:currentGroup().items):draft.kind==='system'?`<div class="field"><span class="field-title" id="system-title">Команда Windows</span><div class="kind-choices system-choices" role="group" aria-labelledby="system-title">${Object.entries(systemNames).map(([value,label])=>`<button class="kind-choice system-choice ${draft.target===value?'active':''}" data-system="${value}" type="button" aria-pressed="${draft.target===value}">${icon(systemIcons[value],19)}<span>${label}</span></button>`).join('')}</div></div>`:scriptPickerFields(draft,pickerConfig);
+    const targetField=draft.kind==='app'?appPickerFields(draft,pickerConfig):draft.kind==='folder'?folderPickerFields(draft,pickerConfig):draft.kind==='group'?groupPickerFields(draft,pickerConfig,existing?[]:currentGroup().items.filter(item=>groupPath.length+1+groupHeight(item)<=MAX_GROUP_DEPTH)):draft.kind==='system'?`<div class="field"><span class="field-title" id="system-title">Команда Windows</span><div class="kind-choices system-choices" role="group" aria-labelledby="system-title">${Object.entries(systemNames).map(([value,label])=>`<button class="kind-choice system-choice ${draft.target===value?'active':''}" data-system="${value}" type="button" aria-pressed="${draft.target===value}">${icon(systemIcons[value],19)}<span>${label}</span></button>`).join('')}</div></div>`:scriptPickerFields(draft,pickerConfig);
     // Windows commands are named by the chosen tile, so they need no name field.
     const fields=['app','system','folder','script','group'].includes(draft.kind)?targetField:`<div class="field"><label for="action-name">Назва</label><input id="action-name" name="name" maxlength="100" value="${e(draft.name)}" placeholder="${{script:'Візьметься з назви файлу',group:'Наприклад, Монтаж'}[draft.kind]||''}" ${draft.kind==='group'?'required':''}></div>${targetField}`;
-    modal(existing?'Редагувати дію':'Додати дію',`<form class="modal-body" id="action-form"><div class="kind-choices" role="group" aria-label="Тип дії">${Object.entries(kinds).map(([kind,label])=>`<button class="kind-choice ${draft.kind===kind?'active':''}" data-kind="${kind}" type="button" aria-pressed="${draft.kind===kind}">${icon(kind,19)}${label}</button>`).join('')}</div>${fields}<p class="form-error" id="form-error" role="alert"></p></form>`,`${existing?`<button class="btn danger" type="button" id="delete-action">${icon('trash',14)}Видалити</button>`:''}<button class="btn" data-command="dismiss">Скасувати</button><button class="btn primary" type="submit" form="action-form">${primaryLabel()}</button>`,true);
+    modal(existing?'Редагувати дію':'Додати дію',`<form class="modal-body" id="action-form"><div class="kind-choices" role="group" aria-label="Тип дії">${Object.entries(kinds).filter(([kind])=>kind!=='group'||existing?.kind==='group'||groupPath.length<MAX_GROUP_DEPTH).map(([kind,label])=>`<button class="kind-choice ${draft.kind===kind?'active':''}" data-kind="${kind}" type="button" aria-pressed="${draft.kind===kind}">${icon(kind,19)}${label}</button>`).join('')}</div>${fields}<p class="form-error" id="form-error" role="alert"></p></form>`,`${existing?`<button class="btn danger" type="button" id="delete-action">${icon('trash',14)}Видалити</button>`:''}<button class="btn" data-command="dismiss">Скасувати</button><button class="btn primary" type="submit" form="action-form">${primaryLabel()}</button>`,true);
     capture=()=>{
       const form=new FormData(document.querySelector('#action-form'));
-      if(draft.kind==='system'){draft.name=existing?.kind==='system'&&existing.target===draft.target?existing.name:systemNames[draft.target];draft.args='';return;}
+      if(draft.kind==='system'){if(!nameTyped||existing?.kind==='system')draft.name=existing?.kind==='system'&&existing.target===draft.target?existing.name:systemNames[draft.target];draft.args='';return;}
       draft.name=String(form.get('name')||'').trim();draft.target=draft.kind==='group'?'':String(form.get('target')||'').trim();draft.args=String(form.get('args')||'');
     };
     if(draft.kind==='app')modalCleanup=mountAppPicker({form:document.querySelector('#action-form'),draft,config:pickerConfig,onChoose:entry=>{
@@ -197,7 +201,7 @@ function actionDialog(id){
       document.querySelectorAll('[data-system]').forEach(other=>{const active=other===button;other.classList.toggle('active',active);other.setAttribute('aria-pressed',String(active));});
     });
     document.querySelectorAll('[data-system]').forEach(button=>button.ondblclick=()=>{draft.target=button.dataset.system;submit();});
-    document.querySelector('#browse-target')?.addEventListener('click',async()=>{capture();try{const value=await api.pickTarget(draft.kind);if(value){draft.target=value;const name=draft.kind==='folder'?folderName(value):draft.kind==='script'?scriptName(value):value.split(/[\\/]/).pop().replace(/\.[^.]+$/,'');if(!draft.name||draft.name===pickerConfig.selectedName)draft.name=name;if(draft.kind==='app'){pickerConfig.mode='search';pickerConfig.selectedName=name;pickerConfig.query=name;draw();if(!existing&&!pickerConfig.detailsOpen)submit();}else{document.querySelector('#action-target').value=value;document.querySelector('#action-name').value=draft.name;}}}catch(error){document.querySelector('#form-error').textContent=error.message;}});
+    document.querySelector('#browse-target')?.addEventListener('click',async()=>{capture();try{const value=await api.pickTarget(draft.kind);if(value){draft.target=value;const name=draft.kind==='folder'?folderName(value):draft.kind==='script'?scriptName(value):value.split(/[\\/]/).pop().replace(/\.[^.]+$/,'');if(!draft.name||draft.name===pickerConfig.selectedName||!nameTyped)draft.name=name;if(draft.kind==='app'){pickerConfig.mode='search';pickerConfig.selectedName=name;pickerConfig.query=name;draw();if(!existing&&!pickerConfig.detailsOpen)submit(true);}else{document.querySelector('#action-target').value=value;document.querySelector('#action-name').value=draft.name;}}}catch(error){document.querySelector('#form-error').textContent=error.message;}});
     document.querySelector('#delete-action')?.addEventListener('click',()=>deleteDialog('action',draft.id));
     document.querySelector('#action-form').onsubmit=event=>{event.preventDefault();submit();};
   }
@@ -212,21 +216,21 @@ function actionDialog(id){
   // submit() re-reads the form, so a chosen folder or script is written into its (possibly hidden) fields first.
   function chooseFolder(target,name){
     const path=document.querySelector('#action-target'),label=document.querySelector('#action-name');
-    if(path)path.value=target;if(label)label.value=name;
-    submit();
+    if(path)path.value=target;if(label&&!nameTyped)label.value=name;
+    submit(true);
   }
   // With the advanced section open the script only fills the form, so arguments can be added before saving.
   function chooseScript(target){
     const path=document.querySelector('#action-target'),label=document.querySelector('#action-name');
     if(path)path.value=target;if(label&&!nameTyped)label.value=scriptName(target);
-    if(!document.querySelector('.app-advanced')?.open)submit();else document.querySelector('#action-args')?.focus();
+    if(!document.querySelector('.app-advanced')?.open)submit(true);else document.querySelector('#action-args')?.focus();
   }
-  async function submit(){
-    capture();if(!existing&&['app','folder','script'].includes(draft.kind)&&pickerConfig.picked?.size){await addPicked();return;}
+  async function submit(single=false){
+    capture();if(!single&&!existing&&['app','folder','script'].includes(draft.kind)&&pickerConfig.picked?.size){await addPicked();return;}
     if(!draft.name&&draft.target&&draft.kind==='folder')draft.name=folderName(draft.target);
     if(!draft.name&&draft.target&&draft.kind==='script')draft.name=scriptName(draft.target);
     if(!draft.name&&draft.kind==='group')draft.name='Нова група';if(draft.kind==='app'&&!draft.target){document.querySelector('#form-error').textContent='Оберіть застосунок зі списку, файл або вкажіть посилання.';document.querySelector('#app-search,#action-target')?.focus();return;}if(!draft.name){document.querySelector('#form-error').textContent='Вкажіть назву дії.';document.querySelector('#action-name').focus();return;}const next=structuredClone(state),old=state;state=next;const moving=!existing&&draft.kind==='group'?pickerConfig.moveIds:null;
-    if(existing){const found=locate(existing.id);found.items[found.index]=draft;}
+    if(existing){const found=locate(existing.id);if(draft.kind==='group'&&found.item.kind==='group')draft.children=found.item.children;found.items[found.index]=draft;}
     else if(moving?.size){
       // Ticked actions move into the new group, which takes the place of the first of them.
       const level=currentGroup().items,at=level.findIndex(item=>moving.has(item.id));
@@ -350,7 +354,7 @@ function restackWheel(){let items=currentMenu().items;const next=[];for(const gr
 async function addFromWheel(){
   clearWheelTimers();
   const groupPath=wheelStack.map(item=>item.id);
-  if(!wheelAddItem()){wheelOpen=false;await api.openAddDialog(groupPath);return;}
+  if(!wheelAddItem()){wheelOpen=false;await api.openAddDialog(groupPath).catch(()=>api.closeWheel());return;}
   wheelBusy=true;
   try{const result=await api.addWheelAction(groupPath);state=await api.getState();restackWheel();wheelSelected=wheelItems().findIndex(item=>item.id===result.id);drawOverlay();}
   catch(error){toast(error.message.replace(/^Error invoking remote method '[^']+': (Error: )?/,''),true);}
@@ -369,6 +373,7 @@ function selectWheel(index,keyboard=false){
   document.querySelectorAll('[data-sector]').forEach(node=>node.classList.toggle('selected',node.dataset.sector===selected?.id));
   document.querySelectorAll('[data-wheel-id]').forEach(node=>node.classList.toggle('selected',node.dataset.wheelId===selected?.id));
   document.querySelectorAll('[data-add-slot]').forEach(node=>node.classList.toggle('selected',selected===ADD_SLOT));
+  if(keyboard)(selected===ADD_SLOT?document.querySelector('.wheel-item.wheel-add'):[...document.querySelectorAll('.wheel-item[data-wheel-id]')].find(node=>node.dataset.wheelId===selected?.id))?.focus();
   // The "+" slot never activates by hovering, only by an explicit click, Enter or release.
   if(!selected||selected===ADD_SLOT||keyboard||wheelBusy)return;
   if(selected.kind==='group'){if(state.groupOpenMode!=='click')groupTimer=setTimeout(()=>openWheelGroup(selected),300);}
@@ -401,14 +406,14 @@ function initOverlay(){
     const bounds=document.querySelector('#overlay-wheel').getBoundingClientRect(),scale=bounds.width/480;
     selectWheel(sectorAt((event.clientX-bounds.left-bounds.width/2)/scale,(event.clientY-bounds.top-bounds.height/2)/scale,wheelItems().length,88,225));
   });
-  root.addEventListener('click',event=>{const itemButton=event.target.closest('[data-wheel-id]'),sector=event.target.closest('[data-sector]');if(event.target.closest('[data-wheel-back]')){wheelBack();return;}if(event.target.closest('[data-add-slot]')){wheelSelected=wheelItems().indexOf(ADD_SLOT);if(wheelSelected<0&&!wheelItems().length){wheelOpen=false;api.openAddDialog(wheelStack.map(item=>item.id));return;}commitWheel();return;}if(itemButton||sector){const id=itemButton?.dataset.wheelId||sector.dataset.sector;wheelSelected=wheelItems().findIndex(i=>i.id===id);commitWheel();}});
+  root.addEventListener('click',event=>{const itemButton=event.target.closest('[data-wheel-id]'),sector=event.target.closest('[data-sector]');if(event.target.closest('[data-wheel-back]')){wheelBack();return;}if(event.target.closest('[data-add-slot]')){wheelSelected=wheelItems().indexOf(ADD_SLOT);if(wheelSelected<0&&!wheelItems().length){wheelOpen=false;api.openAddDialog(wheelStack.map(item=>item.id)).catch(()=>api.closeWheel());return;}commitWheel();return;}if(itemButton||sector){const id=itemButton?.dataset.wheelId||sector.dataset.sector;wheelSelected=wheelItems().findIndex(i=>i.id===id);commitWheel();}});
 }
 
 async function init(){
   if(!api){root.innerHTML='<div class="empty-state"><h1>Orbit</h1><p>Відкрийте застосунок через Orbit.exe або npm start.</p></div>';return;}
   state=await api.getState();runtime=await api.getRuntime();updateStatus=await api.getUpdateStatus();applyTheme();
   api.onUpdateStatus(next=>{updateStatus=next;if(!overlay)refreshUpdates(next);});
-  api.onStateChanged(next=>{state=next;applyTheme();if(!overlay)render();else if(wheelOpen&&!wheelBusy){clearWheelTimers();restackWheel();wheelSelected=-1;drawOverlay();}});
+  api.onStateChanged(next=>{state=next;applyTheme();if(!overlay){trimGroupPath();render();}else if(wheelOpen&&!wheelBusy){clearWheelTimers();restackWheel();wheelSelected=-1;drawOverlay();}});
   api.onRuntimeChanged(next=>{runtime=next;if(!overlay)render();});
   api.onNavigate(next=>{
     const target=typeof next==='string'?{page:next}:next||{};

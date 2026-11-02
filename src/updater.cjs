@@ -165,7 +165,7 @@ function createUpdater(options) {
     const signal = activeAbort.signal;
     const timer = setTimeout(() => activeAbort?.abort(), timeout);
     try { return await task(signal); }
-    catch (error) { if (disposed) return snapshot(); await discardPrepared(); return failure(error); }
+    catch (error) { if (disposed) return snapshot(); console.error('Orbit update failed:', error); await discardPrepared(); return failure(error); }
     finally { clearTimeout(timer); activeAbort = null; busy = false; }
   }
 
@@ -214,9 +214,24 @@ function createUpdater(options) {
     }
   }
 
+  async function reportFailedInstall() {
+    for (const entry of await fsp.readdir(paths.updates, { withFileTypes: true }).catch(() => [])) {
+      if (!entry.isDirectory() || !/^[0-9a-f]{32}$/.test(entry.name)) continue;
+      const result = await readSmallJSON(path.join(paths.updates, entry.name, 'result.json')).catch(() => null);
+      if (!result || result.ok !== false) continue;
+      const journal = await readSmallJSON(path.join(paths.updates, entry.name, 'journal.json')).catch(() => ({}));
+      const target = typeof journal.version === 'string' ? ` до ${journal.version}` : '';
+      return publish('error', { message: result.rolledBack === false && typeof result.error === 'string' && result.error.includes('recovery')
+        ? `Оновлення${target} не встановилося, а відновити попередню версію не вдалося. Перевстановіть Orbit з GitHub.`
+        : `Оновлення${target} не встановилося, Orbit працює на попередній версії. Спробуйте ще раз.` });
+    }
+    return null;
+  }
+
   return {
     getStatus: snapshot,
     cleanup,
+    reportFailedInstall,
     async check() {
       if (committed) return snapshot();
       return operation(async signal => {

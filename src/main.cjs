@@ -14,7 +14,7 @@ const HIDDEN = process.argv.includes('--hidden');
 // Popular programs added to a brand-new wheel when they are installed.
 const FIRST_RUN_APPS = ['Google Chrome', 'Microsoft Edge', 'Firefox', 'Telegram', 'Visual Studio Code', 'Figma', 'Spotify', 'Discord', 'Notion', 'Slack',
   'Microsoft Word', 'Microsoft Excel', 'Zoom', 'Steam', 'Blender', 'OBS Studio'];
-let firstRun = false;
+let firstRun = false, stateRecoveryFile = null;
 // The program that was in front when the wheel opened; the wheel's "+" adds it.
 let wheelForeground = null;
 const NATIVE = app.isPackaged && __dirname.includes('app.asar')
@@ -137,8 +137,12 @@ function defaultState() {
 async function loadState() {
   try { return validateState(JSON.parse(await fsp.readFile(statePath, 'utf8'))); }
   catch (error) {
-    if (error.code !== 'ENOENT') console.warn('Orbit: configuration could not be loaded; using defaults.', error.message);
-    else firstRun = true;
+    if (error.code === 'ENOENT') { firstRun = true; return defaultState(); }
+    // The broken file is moved aside so the next save cannot overwrite the user's menus.
+    const backup = `${statePath}.bad-${Date.now()}`;
+    await fsp.rename(statePath, backup).catch(() => {});
+    console.warn('Orbit: configuration could not be loaded; using defaults.', error.message);
+    stateRecoveryFile = backup;
     return defaultState();
   }
 }
@@ -151,8 +155,8 @@ function updateRuntime(patch) { runtime = { ...runtime, ...patch }; sendAll('orb
 // Keeps the Apps list version current after in-app updates of an installer-made copy.
 function updateUninstallEntry() {
   if (!app.isPackaged || ISOLATED) return;
-  const key = 'HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\Orbit';
-  const reg = path.join(process.env.WINDIR || 'C:\Windows', 'System32', 'reg.exe');
+  const key = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Orbit';
+  const reg = path.join(process.env.WINDIR || 'C:\\Windows', 'System32', 'reg.exe');
   execFile(reg, ['query', key, '/v', 'InstallLocation'], { windowsHide: true }, (error, stdout) => {
     const location = /InstallLocation\s+REG_SZ\s+(.+)/.exec(stdout || '')?.[1]?.trim();
     if (error || !location || path.resolve(location).toLowerCase() !== path.dirname(process.execPath).toLowerCase()) return;
@@ -273,7 +277,7 @@ function readQuickAccess() {
     child.stdout.setEncoding('utf8');
     child.stdout.on('data', chunk => { output += chunk; if (output.length > 65536) { child.kill(); finish(empty); } });
     child.once('error', () => finish(empty));
-    child.once('exit', () => {
+    child.once('close', () => {
       try { const result = JSON.parse(output.trim() || '{}'); finish({ quick: rows(result.quick), drives: rows(result.drives) }); }
       catch { finish(empty); }
     });
@@ -287,9 +291,11 @@ async function listFolders() {
   const known = [], drives = [], quick = [], seen = new Set();
   const add = (list, group, name, folderPath, icon) => {
     const key = path.resolve(folderPath).toLowerCase();
-    if (seen.has(key) || !fs.existsSync(folderPath)) return;
+    if (seen.has(key)) return;
     seen.add(key); list.push({ group, name: name.slice(0, 100), path: folderPath, icon });
   };
+  // A disconnected network drive can stall for seconds; such folders are dropped instead of blocking Orbit.
+  const reachable = folderPath => Promise.race([fsp.access(folderPath).then(() => true, () => false), new Promise(resolve => setTimeout(() => resolve(false), 1500))]);
   const shellFolders = process.platform === 'win32' && !ISOLATED ? await readQuickAccess() : { quick: [], drives: [] };
   // Standard folders keep Orbit's Ukrainian names even when Explorer reports English ones.
   for (const [key, name, icon] of [['desktop', 'Робочий стіл', 'desktop'], ['documents', 'Документи', 'folder'], ['downloads', 'Завантаження', 'import'], ['pictures', 'Зображення', 'image'], ['videos', 'Відео', 'film'], ['music', 'Музика', 'music'], ['home', 'Особиста папка', 'home']]) {
@@ -299,17 +305,21 @@ async function listFolders() {
   for (const row of shellFolders.drives) add(drives, 'drive', row.name, row.path, 'drive');
   if (process.platform === 'win32' && !drives.length) for (const letter of 'CDEFGHIJKLMNOPQRSTUVWXYZ') add(drives, 'drive', `Диск ${letter}:`, `${letter}:\\`, 'drive');
   for (const row of shellFolders.quick) add(quick, 'quick', row.name, row.path, 'folder');
-  return [...quick, ...known, ...drives];
+  const all = [...quick, ...known, ...drives];
+  const present = await Promise.all(all.map(folder => reachable(folder.path)));
+  return all.filter((_, index) => present[index]);
 }
 
 // Scripts offered as tiles: a shallow, bounded scan of the usual places and of folders that already hold script actions.
 const SCRIPT_EXTENSIONS = new Set(['.ps1', '.py', '.js', '.cjs']);
 const SKIPPED_FOLDERS = new Set(['node_modules', '.git', 'appdata', '$recycle.bin', 'windows', 'program files', 'program files (x86)', '__pycache__', '.venv', 'venv']);
 async function listScripts() {
+  // Folders of existing script actions come first so a large Documents tree cannot use up the budget;
+  // network paths are skipped so opening the tab never contacts another machine.
   const roots = new Set();
-  for (const key of ['desktop', 'documents', 'downloads']) { try { roots.add(app.getPath(key)); } catch { } }
-  const walkActions = items => items.forEach(item => { if (item.kind === 'script' && path.isAbsolute(item.target)) roots.add(path.dirname(item.target)); if (item.kind === 'group') walkActions(item.children); });
+  const walkActions = items => items.forEach(item => { if (item.kind === 'script' && /^[A-Za-z]:[\\/]/.test(item.target)) roots.add(path.dirname(item.target)); if (item.kind === 'group') walkActions(item.children); });
   state.menus.forEach(menu => walkActions(menu.items));
+  for (const key of ['desktop', 'documents', 'downloads']) { try { roots.add(app.getPath(key)); } catch { } }
   const found = new Map();
   let visited = 0;
   async function walk(folder, depth) {
@@ -325,14 +335,14 @@ async function listScripts() {
   }
   for (const root of roots) await walk(root, 0);
   const scripts = [...found.values()].sort((left, right) => right.modified - left.modified).slice(0, 60).map(({ modified, ...script }) => script);
-  return { scripts, python: pythonLauncherInstalled() };
+  return { scripts, python: !!pythonLauncherPath() };
 }
 
 // py.exe is what Orbit uses to run .py scripts; it lives in Windows or on PATH.
-function pythonLauncherInstalled() {
+function pythonLauncherPath() {
   const candidates = [path.join(process.env.WINDIR || 'C:\\Windows', 'py.exe'), path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Python', 'Launcher', 'py.exe'),
     ...(process.env.PATH || '').split(path.delimiter).filter(Boolean).map(folder => path.join(folder, 'py.exe'))];
-  return candidates.some(candidate => { try { return fs.statSync(candidate).isFile(); } catch { return false; } });
+  return candidates.find(candidate => path.isAbsolute(candidate) && (() => { try { return fs.statSync(candidate).isFile(); } catch { return false; } })()) || null;
 }
 
 async function seedFirstRunApps() {
@@ -495,7 +505,11 @@ async function executeAction(input) {
       } else if (action.kind === 'script') {
         if (!stat.isFile()) throw new Error('Виберіть файл скрипту.');
         if (extension === '.ps1') await startProcess(path.join(process.env.WINDIR || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'), ['-NoProfile', '-File', action.target, ...args], { cwd: path.dirname(action.target) });
-        else if (extension === '.py') await startProcess('py.exe', [action.target, ...args], { cwd: path.dirname(action.target) });
+        else if (extension === '.py') {
+          const python = pythonLauncherPath();
+          if (!python) throw new Error('Не знайдено Python Launcher (py.exe). Встановіть Python з python.org.');
+          await startProcess(python, [action.target, ...args], { cwd: path.dirname(action.target) });
+        }
         else if (extension === '.js' || extension === '.cjs') await startProcess(process.execPath, [action.target, ...args], { cwd: path.dirname(action.target), env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' } });
         else throw new Error('Підтримуються скрипти .ps1, .py, .js та .cjs.');
       } else if (extension === '.exe') await startProcess(action.target, args, { cwd: path.dirname(action.target) });
@@ -597,8 +611,8 @@ function updateTray() {
     { label: 'Показати колесо', click: () => showWheel().catch(console.error) },
     { label: 'Додати дію…', click: () => showMain({ page: 'menus', groupPath: [], add: true }) },
     ...(state.menus.length > 1 ? [{ label: 'Меню на колесі', submenu: state.menus.map(menu => ({ label: menu.name, type: 'radio', checked: menu.id === state.activeMenuId,
-      click: () => saveState({ ...state, activeMenuId: menu.id }).catch(console.error) })) }] : []),
-    { label: 'Увімкнено', type: 'checkbox', checked: state.enabled, click: item => saveState({ ...state, enabled: item.checked }).catch(console.error) },
+      click: () => saveState({ ...state, activeMenuId: menu.id }).catch(error => { console.error(error); updateTray(); }) })) }] : []),
+    { label: 'Увімкнено', type: 'checkbox', checked: state.enabled, click: item => saveState({ ...state, enabled: item.checked }).catch(error => { console.error(error); updateTray(); }) },
     { type: 'separator' }, { label: 'Вийти з Orbit', click: () => app.quit() },
   ]));
 }
@@ -664,6 +678,9 @@ else {
       onInstallReady: () => app.quit(),
     });
     registerIPC(); await createWindows();
+    if (stateRecoveryFile && !ISOLATED) dialog.showMessageBox(mainWindow, { type: 'warning', title: 'Orbit', message: 'Не вдалося прочитати налаштування Orbit.', detail: `Меню скинуто до початкових. Попередній файл збережено як:\n${stateRecoveryFile}` }).catch(() => {});
+    // An install that failed after Orbit closed is reported once, before cleanup removes its files.
+    if (app.isPackaged && !ISOLATED) updater.reportFailedInstall().catch(error => console.warn('Orbit: could not read the last update result.', error));
     if (SMOKE) { await smokeTest(); app.quit(); return; }
     appCatalog.warm();
     if (E2E) { globalThis.__orbitE2E = { resolveForeground: exePath => resolveForeground(exePath, wheelSession) }; return; }

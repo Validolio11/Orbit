@@ -181,7 +181,8 @@ function createAppCatalog({ discover = discoverWindowsApps, loadIcon = async () 
     async findExecutable(target) {
       if (disposed || !isLocalAppPath(target)) return null;
       await ensureIndex();
-      const key = targetKey(target), entry = (entries || []).find(item => targetKey(item._resolvedTarget) === key);
+      const key = targetKey(target), matches = (entries || []).filter(item => targetKey(item._resolvedTarget) === key);
+      const entry = matches.find(item => !item._resolvedArgs.trim()) || matches[0];
       return entry ? { name: entry.name, target: entry.target, args: entry.args } : null;
     },
     // First catalog entry whose name equals or starts with each wanted name, in the given order.

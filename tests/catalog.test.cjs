@@ -178,6 +178,13 @@ test('catalog finds the shortcut behind a running executable and popular apps by
   const chrome = await catalog.findExecutable('c:\\program files\\google\\chrome\\application\\CHROME.EXE');
   assert.deepEqual(chrome, { name: 'Google Chrome', target: 'C:\\Start Menu\\Google Chrome.lnk', args: '' });
   assert.equal(await catalog.findExecutable('C:\\Other\\unknown.exe'), null);
+  // A profile or InPrivate shortcut to the same program loses to the plain one.
+  const variants = createAppCatalog({ discover: async () => [
+    app('Edge InPrivate', 'C:\\Start Menu\\Edge InPrivate.lnk', 'start-menu', { resolvedTarget: 'C:\\Edge\\msedge.exe', resolvedArgs: '--inprivate' }),
+    app('Microsoft Edge', 'C:\\Start Menu\\Microsoft Edge.lnk', 'start-menu', { resolvedTarget: 'C:\\Edge\\msedge.exe', resolvedArgs: '' }),
+  ] });
+  assert.equal((await variants.findExecutable('C:\\Edge\\msedge.exe')).name, 'Microsoft Edge');
+  variants.dispose();
   const named = await catalog.findNamed(['Firefox', 'Telegram', 'Visual Studio Code', 'Google Chrome']);
   assert.deepEqual(named.map(entry => entry.name), ['Telegram Desktop', 'Visual Studio Code', 'Google Chrome']);
   catalog.dispose();

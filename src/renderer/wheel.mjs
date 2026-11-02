@@ -37,7 +37,7 @@ export function renderWheel(container,items,options={}){
        ${itemIcon(item,25)}<span class="wheel-item-label">${escapeHTML(item.name)}</span>${item.kind==='group'?'<i class="group-indicator">···</i>':''}
       </button>`;
     }).join('')}
-    <button class="wheel-center" aria-label="${options.back?'Назад':'Центр меню'}" ${options.back?'data-wheel-back':''}>
+    <button class="wheel-center" aria-label="${options.back?'Назад':escapeHTML(title)+', '+items.length+' дій'}" ${options.back?'data-wheel-back':''}>
       ${icon(options.back?'back':'orbit',options.back?24:30)}
       <strong>${escapeHTML(title)}</strong><small>${options.back?'Назад':items.length+' дій'}</small>
     </button>

@@ -173,7 +173,7 @@ const fs = require('node:fs/promises');
       await overlay.locator('.wheel').evaluate(async wheel=>{
         await Promise.all(wheel.getAnimations({subtree:true}).map(animation=>animation.finished.catch(()=>{})));
       });
-      await overlay.getByRole('button',{name:'Центр меню',exact:true}).click();
+      await overlay.locator('.wheel-center').click();
       await overlay.waitForFunction(()=>document.hasFocus()&&document.visibilityState==='visible');
       await overlay.keyboard.press('ArrowRight');
       await overlay.locator('[data-sector="adobe"].selected').waitFor();

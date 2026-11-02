@@ -18,7 +18,7 @@ export function scriptPickerFields(draft,config){
   return `<div class="field app-search-field"><div class="app-search-heading"><label for="script-search">Виберіть скрипт</label><div class="app-manual-actions"><button class="btn small ghost" type="button" id="browse-script">${icon('script',13)}Обрати файл…</button></div></div>
     <div class="app-search-input">${icon('search',16)}<input id="script-search" type="search" autocomplete="off" spellcheck="false" placeholder="Пошук за назвою або папкою"></div>
     <div id="script-results" class="app-grid script-grid" role="listbox" aria-label="Знайдені скрипти" aria-multiselectable="true"><div class="app-search-status" role="status">Шукаємо скрипти…</div></div>
-    <small class="app-grid-hint" id="script-hint">Клацніть скрипт, щоб додати його. Шукаємо .ps1, .py, .js і .cjs на робочому столі, у Документах, Завантаженнях і папках ваших скриптів.</small></div>
+    <small class="app-grid-hint" id="script-hint">Клацніть скрипт, щоб додати його, або позначте кілька галочкою (Пробіл). Шукаємо .ps1, .py, .js і .cjs на робочому столі, у Документах, Завантаженнях і папках ваших скриптів.</small></div>
     <details class="app-advanced" ${config.detailsOpen?'open':''}><summary>${icon('chevron',13)}Аргументи та шлях вручну</summary>${pathField}${nameField}${argsField}</details>`;
 }
 
@@ -33,13 +33,13 @@ export function mountScriptPicker({form,config,onChoose,onPickedChange=()=>{}}){
     if(!rows.length){grid.innerHTML='<div class="app-search-status" role="status">Нічого не знайдено. Спробуйте іншу назву або оберіть файл.</div>';return;}
     grid.innerHTML=rows.map(({entry,index})=>{
       const picked=config.picked.has(entry.target),missing=entry.extension==='.py'&&!python;
-      return `<button type="button" class="app-result script-result ${picked?'picked':''} ${missing?'unavailable':''}" role="option" data-script="${index}" aria-checked="${picked}" title="${e(entry.target)}${missing?'&#10;Потрібен Python Launcher (py.exe)':''}"><span class="app-result-icon">${icon('script',26)}<i class="script-type">${TYPES[entry.extension]||''}</i></span><span class="app-result-copy"><strong>${e(entry.name)}</strong><small>${e(missing?'Немає Python':entry.folder)}</small></span><span class="app-result-check" title="Позначити">${icon('check',12)}</span></button>`;
+      return `<button type="button" class="app-result script-result ${picked?'picked':''} ${missing?'unavailable':''}" role="option" data-script="${index}" aria-selected="${picked}" title="${e(entry.target)}${missing?'&#10;Потрібен Python Launcher (py.exe)':''}"><span class="app-result-icon">${icon('script',26)}<i class="script-type">${TYPES[entry.extension]||''}</i></span><span class="app-result-copy"><strong>${e(entry.name)}</strong><small>${e(missing?'Немає Python':entry.folder)}</small></span><span class="app-result-check" title="Позначити">${icon('check',12)}</span></button>`;
     }).join('');
   }
   const toggle=index=>{
     const entry=scripts[index];if(!entry)return;
     if(config.picked.has(entry.target))config.picked.delete(entry.target);else config.picked.set(entry.target,entry);
-    const node=grid.querySelector(`[data-script="${index}"]`);node?.classList.toggle('picked',config.picked.has(entry.target));node?.setAttribute('aria-checked',String(config.picked.has(entry.target)));
+    const node=grid.querySelector(`[data-script="${index}"]`);node?.classList.toggle('picked',config.picked.has(entry.target));node?.setAttribute('aria-selected',String(config.picked.has(entry.target)));
     onPickedChange(config.picked.size);
   };
   window.orbit.listScripts().then(result=>{
@@ -55,6 +55,8 @@ export function mountScriptPicker({form,config,onChoose,onPickedChange=()=>{}}){
     if(event.key==='Enter'){event.preventDefault();event.stopPropagation();const first=visible()[0];if(first)onChoose(first.entry);}
     else if(event.key==='Escape'&&input.value){event.preventDefault();event.stopPropagation();input.value='';draw();}
   });
+  grid.addEventListener('keydown',event=>{const button=event.target.closest('[data-script]');if(event.key===' '&&button){event.preventDefault();toggle(Number(button.dataset.script));}});
+  grid.addEventListener('keyup',event=>{if(event.key===' '&&event.target.closest('[data-script]'))event.preventDefault();});
   grid.addEventListener('click',event=>{
     if(event.target.closest('[data-browse-script]')){form.querySelector('#browse-script')?.click();return;}
     const button=event.target.closest('[data-script]');if(!button)return;

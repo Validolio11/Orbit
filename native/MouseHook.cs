@@ -72,6 +72,7 @@ internal static class MouseHook
         MainThread = GetCurrentThreadId();
         MSG message;
         PeekMessage(out message, IntPtr.Zero, 0, 0, 0);
+        ResolveForeground(ForegroundMarker());
         Hook = SetWindowsHookEx(WH_MOUSE_LL, Callback, GetModuleHandle(null), 0);
         if (Hook == IntPtr.Zero) { Console.Error.WriteLine("Unable to install mouse hook: " + Marshal.GetLastWin32Error()); return 3; }
         var writer = new Thread(WriteEvents); writer.IsBackground = true; writer.Start();
@@ -95,8 +96,12 @@ internal static class MouseHook
         long kind = message.ToInt64();
         if (code >= 0 && (kind == WM_LBUTTONDOWN || kind == WM_RBUTTONDOWN || kind == WM_MBUTTONDOWN || kind == WM_XBUTTONDOWN || kind == WM_XBUTTONUP))
         {
-            var mouse = (MSLLHOOKSTRUCT)Marshal.PtrToStructure(data, typeof(MSLLHOOKSTRUCT));
-            if (InspectMouse(kind, mouse)) return new IntPtr(1);
+            try
+            {
+                var mouse = (MSLLHOOKSTRUCT)Marshal.PtrToStructure(data, typeof(MSLLHOOKSTRUCT));
+                if (InspectMouse(kind, mouse)) return new IntPtr(1);
+            }
+            catch { }
         }
         return CallNextHookEx(Hook, code, message, data);
     }
@@ -117,7 +122,7 @@ internal static class MouseHook
             if (button == SelectedButton)
             {
                 // The program in front is read here, before the wheel can take focus.
-                string foreground = kind == WM_XBUTTONDOWN ? ",\"foreground\":\"" + JsonText(ForegroundPath()) + "\"" : "";
+                string foreground = kind == WM_XBUTTONDOWN ? ",\"foreground\":\"" + ForegroundMarker() + "\"" : "";
                 Enqueue("{\"type\":\"" + (kind == WM_XBUTTONDOWN ? "down" : "up") + "\",\"x\":" + mouse.pt.x + ",\"y\":" + mouse.pt.y + ",\"button\":" + button + foreground + "}");
                 return true;
             }
@@ -170,7 +175,7 @@ internal static class MouseHook
     private static void Enqueue(string value) { Events.Enqueue(value); WakeWriter.Set(); }
     private static void WriteEvents()
     {
-        try { while (Running || !Events.IsEmpty) { string value; while (Events.TryDequeue(out value)) Console.WriteLine(value); WakeWriter.WaitOne(100); } }
+        try { while (Running || !Events.IsEmpty) { string value; while (Events.TryDequeue(out value)) Console.WriteLine(ResolveForeground(value)); WakeWriter.WaitOne(100); } }
         catch { RequestStop(); }
     }
     private static void RequestStop() { PostThreadMessage(MainThread, WM_QUIT, UIntPtr.Zero, IntPtr.Zero); }
@@ -212,18 +217,48 @@ internal static class MouseHook
         }
     }
 
-    private static string ForegroundPath()
+    private static uint ForegroundId()
     {
         uint id;
         GetWindowThreadProcessId(GetForegroundWindow(), out id);
+        return id;
+    }
+
+    private static string ForegroundPath() { return ProcessPath(ForegroundId()); }
+
+    // Opening a process can be slowed by security software, so it never runs inside the hook callback:
+    // the hook writes \u0001<pid>\u0001 and the writer thread swaps in the executable path.
+    private static string ForegroundMarker() { return "\u0001" + ForegroundId() + "\u0001"; }
+
+    private static string ResolveForeground(string value)
+    {
+        int start = value.IndexOf('\u0001'), end = start < 0 ? -1 : value.IndexOf('\u0001', start + 1);
+        if (end < 0) return value;
+        uint id;
+        string path = uint.TryParse(value.Substring(start + 1, end - start - 1), out id) ? ProcessPath(id) : "";
+        return value.Substring(0, start) + JsonText(path) + value.Substring(end + 1);
+    }
+
+    private static string ProcessPath(uint id)
+    {
         if (id == 0) return "";
         IntPtr process = OpenProcess(0x1000, false, id);
         if (process == IntPtr.Zero) return "";
-        try { var name = new StringBuilder(1024); int size = name.Capacity; return QueryFullProcessImageName(process, 0, name, ref size) ? name.ToString() : ""; }
+        try { var name = new StringBuilder(32768); int size = name.Capacity; return QueryFullProcessImageName(process, 0, name, ref size) ? name.ToString() : ""; }
         finally { CloseHandle(process); }
     }
 
-    private static string JsonText(string value) { return value.Replace("\\", "\\\\").Replace("\"", "\\\""); }
+    private static string JsonText(string value)
+    {
+        var text = new StringBuilder(value.Length + 8);
+        foreach (char c in value)
+        {
+            if (c == '\\' || c == '"') text.Append('\\').Append(c);
+            else if (c < ' ') text.Append("\\u").Append(((int)c).ToString("x4"));
+            else text.Append(c);
+        }
+        return text.ToString();
+    }
 
     private static int DoAction(string action)
     {
