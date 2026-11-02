@@ -173,3 +173,8 @@ Remaining hardware validation: press Mouse4/Mouse5 on the user's actual mouse, e
 - Settings are flushed to disk before replacing settings.json and the previous good file is kept as settings.json.bak; an empty or damaged file is restored from it (tests/settings-file.test.cjs).
 - startup.log records each start (version, autostart or manual, login-item state). On this PC the Run entry survived a simulated sign-out (WM_QUERYENDSESSION/WM_ENDSESSION) and the exact Run command started Orbit hidden with the hook and unchanged settings; a real sign-in at 11:17 did not launch it and is to be re-checked with the log.
 - Unit 67, UI (twice), search, drag, wheel-drag, wheel-add, icons, updates and updater transaction suites pass; the installer was compiled, not run.
+
+## Mouse diagram · 0.1.12
+
+- The settings mouse diagram lit the lower side button for Mouse 5. Mouse 5 (forward) is now the upper side button and Mouse 4 (back) the lower one; `npm run test:ui` checks which button is lit for both choices.
+- A report that Orbit did not react was checked on the user's PC: no window was elevated, Ctrl+Space and an injected Mouse 4 both opened the wheel. The PC has an ASUS ROG mouse with Armoury Crate, which can remap side buttons per profile.
