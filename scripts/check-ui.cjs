@@ -123,11 +123,16 @@ const fs = require('node:fs/promises');
     await page.getByText('Дій не знайдено',{exact:true}).waitFor();
     await page.locator('[data-page="controls"]').click();
     await page.getByLabel('Кнопка виклику').selectOption('5');
+    // Mouse 5 (forward) is the upper side button on the diagram, Mouse 4 (back) the lower one.
+    await page.locator('.mouse-side.forward.active').waitFor();
+    assert.equal(await page.locator('.mouse-side.back.active').count(),0);
     await page.getByLabel('Спосіб запуску').selectOption('hover');
     await page.getByLabel('Затримка наведення').selectOption('500');
     await page.getByRole('switch',{name:'Orbit у фоновому режимі',exact:true}).click();
     await page.getByRole('switch',{name:'Orbit у фоновому режимі',exact:true}).click();
     await page.getByLabel('Кнопка виклику').selectOption('4');
+    await page.locator('.mouse-side.back.active').waitFor();
+    assert.equal(await page.locator('.mouse-side.forward.active').count(),0);
     await page.getByLabel('Спосіб запуску').selectOption('click');
     await page.getByLabel('Спосіб запуску').selectOption('release');
     console.log('PASS: search/empty search, Mouse4/5, hover/release/click, hover delay, enabled round trip');
