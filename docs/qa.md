@@ -165,3 +165,11 @@ Remaining hardware validation: press Mouse4/Mouse5 on the user's actual mouse, e
 - Група: name suggestions that also pick an icon, nine icons, and "Перенести в групу" moving ticked actions into the new group at the first one's place.
 - Names Orbit filled in no longer carry over when the action type changes.
 - `npm run test:wheel-add` covers the folder tile, the carry-over fix, script tiles (type, filter, add) and group creation with moved actions. Quick Access and drive labels are skipped in isolated tests; the query was run against the real Explorer.
+
+## Review fixes, durable settings, startup log · 0.1.11
+
+- unslop contract applied by hand to the Ukrainian UI copy (its scanners are English-only): 11 confirmed slogan/filler/contradiction spans repaired.
+- ECC reviewers (security, JavaScript, silent-failure, C#, accessibility) ran read-only; about 35 findings were confirmed against the code and fixed: settings reset protection, reporting of failed in-app installs, no rollback on a failed post-update restart, dialog races and limits, py.exe by absolute path, no network paths in the script scan, non-blocking drive checks, mouse-hook exception guard and off-hook process lookup, installer registration order and self-delete, and WCAG fixes (aria-selected for picks, Space to tick, contrast, focus).
+- Settings are flushed to disk before replacing settings.json and the previous good file is kept as settings.json.bak; an empty or damaged file is restored from it (tests/settings-file.test.cjs).
+- startup.log records each start (version, autostart or manual, login-item state). On this PC the Run entry survived a simulated sign-out (WM_QUERYENDSESSION/WM_ENDSESSION) and the exact Run command started Orbit hidden with the hook and unchanged settings; a real sign-in at 11:17 did not launch it and is to be re-checked with the log.
+- Unit 67, UI (twice), search, drag, wheel-drag, wheel-add, icons, updates and updater transaction suites pass; the installer was compiled, not run.
