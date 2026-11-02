@@ -105,6 +105,8 @@ const fs = require('node:fs/promises');
     console.log('PASS: preview group icon/sector and row click/Enter open children; center/back return; group pencil and ordinary actions edit');
     const before=(await page.locator('.action-name').allTextContents());
     await page.getByRole('button',{name:'Перемістити QA група вище',exact:true}).click();
+    // The list redraws once the move is saved to disk.
+    await page.waitForFunction(previous=>JSON.stringify([...document.querySelectorAll('.action-name')].map(node=>node.textContent))!==previous,JSON.stringify(before));
     const after=await page.locator('.action-name').allTextContents();
     assert.notDeepEqual(after,before);
     await command('duplicate-menu').click();

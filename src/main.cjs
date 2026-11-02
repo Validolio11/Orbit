@@ -5,6 +5,7 @@ const path = require('node:path');
 const os = require('node:os');
 const { spawn, execFile } = require('node:child_process');
 const { randomUUID } = require('node:crypto');
+const { writeDurable, readWithBackup } = require('./settings-file.cjs');
 
 const SMOKE = process.argv.includes('--smoke-test');
 const E2E = process.argv.includes('--e2e');
@@ -14,7 +15,7 @@ const HIDDEN = process.argv.includes('--hidden');
 // Popular programs added to a brand-new wheel when they are installed.
 const FIRST_RUN_APPS = ['Google Chrome', 'Microsoft Edge', 'Firefox', 'Telegram', 'Visual Studio Code', 'Figma', 'Spotify', 'Discord', 'Notion', 'Slack',
   'Microsoft Word', 'Microsoft Excel', 'Zoom', 'Steam', 'Blender', 'OBS Studio'];
-let firstRun = false, stateRecoveryFile = null;
+let firstRun = false, stateRecoveryFile = null, stateRecoveredFromBackup = false;
 // The program that was in front when the wheel opened; the wheel's "+" adds it.
 let wheelForeground = null;
 const NATIVE = app.isPackaged && __dirname.includes('app.asar')
@@ -135,7 +136,17 @@ function defaultState() {
 }
 
 async function loadState() {
-  try { return validateState(JSON.parse(await fsp.readFile(statePath, 'utf8'))); }
+  try {
+    const { value, source } = await readWithBackup(statePath, text => validateState(JSON.parse(text)));
+    if (source === 'backup') {
+      // The damaged main file is moved aside so the next save cannot copy it over the good backup.
+      const damaged = `${statePath}.bad-${Date.now()}`;
+      await fsp.rename(statePath, damaged).catch(() => {});
+      console.warn('Orbit: settings restored from settings.json.bak.');
+      stateRecoveryFile = damaged; stateRecoveredFromBackup = true;
+    }
+    return value;
+  }
   catch (error) {
     if (error.code === 'ENOENT') { firstRun = true; return defaultState(); }
     // The broken file is moved aside so the next save cannot overwrite the user's menus.
@@ -164,6 +175,15 @@ function updateUninstallEntry() {
   });
 }
 
+// A short history of starts tells whether Windows actually launched Orbit at sign-in.
+async function logStartup() {
+  const file = path.join(app.getPath('userData'), 'startup.log');
+  const lines = (await fsp.readFile(file, 'utf8').catch(() => '')).split(/\r?\n/).filter(Boolean).slice(-49);
+  const loginItem = app.isPackaged ? app.getLoginItemSettings({ path: process.execPath, args: ['--hidden'] }).openAtLogin : false;
+  lines.push(`${new Date().toISOString()} ${app.getVersion()} ${HIDDEN ? 'autostart' : 'manual'} login-item=${loginItem}`);
+  await fsp.writeFile(file, lines.join('\n') + '\n', 'utf8');
+}
+
 function applyLoginItem() {
   if (!app.isPackaged || ISOLATED) return;
   try { app.setLoginItemSettings({ openAtLogin: state.launchAtLogin !== false, path: process.execPath, args: ['--hidden'] }); } catch (error) { console.error(error); }
@@ -172,9 +192,7 @@ function applyLoginItem() {
 async function persistState(value) {
   const next = validateState(value);
   await fsp.mkdir(path.dirname(statePath), { recursive: true });
-  const temp = statePath + '.tmp';
-  await fsp.writeFile(temp, JSON.stringify(next, null, 2), { encoding: 'utf8', mode: 0o600 });
-  await fsp.rename(temp, statePath);
+  await writeDurable(statePath, JSON.stringify(next, null, 2));
   const hookChanged = state.triggerButton !== next.triggerButton || state.enabled !== next.enabled;
   state = next;
   nativeTheme.themeSource = state.theme;
@@ -678,7 +696,10 @@ else {
       onInstallReady: () => app.quit(),
     });
     registerIPC(); await createWindows();
-    if (stateRecoveryFile && !ISOLATED) dialog.showMessageBox(mainWindow, { type: 'warning', title: 'Orbit', message: 'Не вдалося прочитати налаштування Orbit.', detail: `Меню скинуто до початкових. Попередній файл збережено як:\n${stateRecoveryFile}` }).catch(() => {});
+    if (stateRecoveryFile && !ISOLATED) dialog.showMessageBox(mainWindow, stateRecoveredFromBackup
+      ? { type: 'info', title: 'Orbit', message: 'Налаштування Orbit відновлено з резервної копії.', detail: `Основний файл був пошкоджений, тож останні зміни перед цим могли не зберегтися. Пошкоджений файл збережено як:\n${stateRecoveryFile}` }
+      : { type: 'warning', title: 'Orbit', message: 'Не вдалося прочитати налаштування Orbit.', detail: `Меню скинуто до початкових. Попередній файл збережено як:\n${stateRecoveryFile}` }).catch(() => {});
+    if (!ISOLATED) logStartup().catch(() => {});
     // An install that failed after Orbit closed is reported once, before cleanup removes its files.
     if (app.isPackaged && !ISOLATED) updater.reportFailedInstall().catch(error => console.warn('Orbit: could not read the last update result.', error));
     if (SMOKE) { await smokeTest(); app.quit(); return; }
