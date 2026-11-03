@@ -6,6 +6,7 @@ const os = require('node:os');
 const { spawn, execFile } = require('node:child_process');
 const { randomUUID } = require('node:crypto');
 const { writeDurable, readWithBackup } = require('./settings-file.cjs');
+const { findRedirectedCopy } = require('./redirect-check.cjs');
 
 const SMOKE = process.argv.includes('--smoke-test');
 const E2E = process.argv.includes('--e2e');
@@ -15,7 +16,7 @@ const HIDDEN = process.argv.includes('--hidden');
 // Popular programs added to a brand-new wheel when they are installed.
 const FIRST_RUN_APPS = ['Google Chrome', 'Microsoft Edge', 'Firefox', 'Telegram', 'Visual Studio Code', 'Figma', 'Spotify', 'Discord', 'Notion', 'Slack',
   'Microsoft Word', 'Microsoft Excel', 'Zoom', 'Steam', 'Blender', 'OBS Studio'];
-let firstRun = false, stateRecoveryFile = null, stateRecoveredFromBackup = false;
+let firstRun = false, stateRecoveryFile = null, stateRecoveredFromBackup = false, redirectedAppData = null;
 // The program that was in front when the wheel opened; the wheel's "+" adds it.
 let wheelForeground = null;
 const NATIVE = app.isPackaged && __dirname.includes('app.asar')
@@ -156,6 +157,24 @@ async function loadState() {
     stateRecoveryFile = backup;
     return defaultState();
   }
+}
+
+// Started by a packaged app (such as a Claude Desktop session), Orbit would save into that app's private
+// copy of AppData, and the Orbit that Windows starts at sign-in would never see those menus. Explorer
+// launches programs outside that virtualization, so Orbit restarts through it. A recent marker in the
+// redirected folder means that restart did not help, and Orbit runs on with a warning instead of looping.
+async function leaveRedirectedAppData() {
+  const copy = await findRedirectedCopy(app.getPath('userData'), { appData: app.getPath('appData'), localAppData: process.env.LOCALAPPDATA }).catch(() => null);
+  if (!copy) return false;
+  const marker = path.join(app.getPath('userData'), 'redirected-restart');
+  const lastRestart = await fsp.stat(marker).then(stat => stat.mtimeMs, () => 0);
+  if (Date.now() - lastRestart < 60000) { console.warn(`Orbit: AppData is still redirected to ${copy}.`); redirectedAppData = copy; return false; }
+  await fsp.writeFile(marker, '').catch(() => {});
+  console.warn(`Orbit: AppData is redirected to ${copy}; restarting through Explorer.`);
+  app.releaseSingleInstanceLock();
+  spawn(path.join(process.env.WINDIR || 'C:\\Windows', 'explorer.exe'), [process.execPath], { detached: true, stdio: 'ignore' }).unref();
+  quitting = true; app.exit(0);
+  return true;
 }
 
 function sendAll(channel, value) {
@@ -681,6 +700,7 @@ else {
     Promise.all([configQueue, stopHook(), updater?.dispose()]).finally(() => { if (tray) { tray.destroy(); tray = null; } app.quit(); });
   });
   app.whenReady().then(async () => {
+    if (app.isPackaged && !ISOLATED && await leaveRedirectedAppData()) return;
     statePath = path.join(app.getPath('userData'), 'settings.json');
     state = await loadState(); nativeTheme.themeSource = state.theme;
     applyLoginItem(); updateUninstallEntry();
@@ -699,6 +719,8 @@ else {
     if (stateRecoveryFile && !ISOLATED) dialog.showMessageBox(mainWindow, stateRecoveredFromBackup
       ? { type: 'info', title: 'Orbit', message: 'Налаштування Orbit відновлено з резервної копії.', detail: `Основний файл був пошкоджений, тож останні зміни перед цим могли не зберегтися. Пошкоджений файл збережено як:\n${stateRecoveryFile}` }
       : { type: 'warning', title: 'Orbit', message: 'Не вдалося прочитати налаштування Orbit.', detail: `Меню скинуто до початкових. Попередній файл збережено як:\n${stateRecoveryFile}` }).catch(() => {});
+    if (redirectedAppData) dialog.showMessageBox(mainWindow, { type: 'warning', title: 'Orbit', message: 'Зміни в цьому вікні Orbit можуть не зберегтися.',
+      detail: `Orbit запущено з іншої програми, і Windows записує його налаштування в її окрему копію:\n${redirectedAppData}\n\nЗакрийте Orbit і запустіть його з меню «Пуск».` }).catch(() => {});
     if (!ISOLATED) logStartup().catch(() => {});
     // An install that failed after Orbit closed is reported once, before cleanup removes its files.
     if (app.isPackaged && !ISOLATED) updater.reportFailedInstall().catch(error => console.warn('Orbit: could not read the last update result.', error));
