@@ -184,3 +184,10 @@ Remaining hardware validation: press Mouse4/Mouse5 on the user's actual mouse, e
 - A wheel built on 2026-11-02 was missing the next day. That Orbit had been started from a Claude Desktop session, and Windows redirected its AppData writes into `%LOCALAPPDATA%\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Orbit`; the Orbit started at sign-in read the real `%APPDATA%\Orbit`, which still held an older wheel. The design was restored with Import from the redirected copy.
 - The redirected process reports no package identity (GetCurrentPackageFullName returns APPMODEL_ERROR_NO_PACKAGE), so Orbit now checks with a probe file instead; `explorer.exe <exe>` was confirmed to write to the real folder. On a redirected start Orbit restarts through Explorer, and a second redirected start within a minute shows a warning instead of looping (tests/redirect-check.test.cjs, and the check found the Claude copy when run from a session).
 - Unit 70 pass. The restart through Explorer was not run in a packaged build.
+
+## Start as administrator · 0.1.14
+
+- Orbit had to be restarted as administrator by hand for the side button to work over elevated windows (UIPI blocks a non-elevated hook there). Settings now has «Запускати з правами адміністратора»: it creates the Task Scheduler task «Orbit (administrator)» with the highest run level after one UAC confirmation, and every later start (shortcut, sign-in, `--quit` from the installer) is handed to that task, so Orbit runs elevated without a prompt. Turning it off removes the task and restarts Orbit unelevated through Explorer.
+- `IRegisteredTask.Run(param)` was confirmed to pass the start mode as `$(Arg0)` with a temporary test task, which was then deleted. The task only starts the Orbit.exe of the folder that registered it.
+- The installer and uninstaller close an elevated Orbit with `Orbit.exe --quit`; a normal uninstall also removes the task.
+- Unit 70 pass, smoke and `npm run test:ui` pass; the status check reported `available:true` in a mock installed folder layout. The elevated flow with a real UAC confirmation was not run in an installed build.
