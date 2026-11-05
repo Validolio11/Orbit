@@ -61,6 +61,7 @@ internal static class MouseHook
         if (Array.IndexOf(args, "--self-test") >= 0) return RunSelfTest();
         foreach (string arg in args) if (arg.StartsWith("--icon=")) return ReadShellIcon(arg.Substring(7));
         foreach (string arg in args) if (arg.StartsWith("--action=")) return DoAction(arg.Substring(9));
+        foreach (string arg in args) if (arg.StartsWith("--admin-task=")) return AdminTask.Run(arg.Substring(13));
         int parentId = 0;
         foreach (string arg in args)
         {

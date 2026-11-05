@@ -96,4 +96,5 @@ npm run package
 - `src/preload.cjs` — обмежений API між інтерфейсом і Windows.
 - `src/renderer/` — редактор і радіальне меню.
 - `native/MouseHook.cs` — XBUTTON hook, Windows-команди та watchdog процесу.
+- `native/AdminTask.cs` — завдання Планувальника «Orbit (administrator)», через яке Orbit стартує з правами адміністратора без запиту UAC.
 - `docs/design.md` — джерела й рішення дизайну.

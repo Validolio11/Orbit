@@ -63,9 +63,10 @@ static class Setup
     static string Option(string[] args, string prefix) { return args.Where(a => a.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)).Select(a => a.Substring(prefix.Length)).FirstOrDefault(); }
 
     // Stops every Orbit copy that holds the single-instance lock, including its native mouse helper.
-    static void CloseOrbit()
+    static void CloseOrbit(string target)
     {
         var processes = Process.GetProcessesByName("Orbit").Concat(Process.GetProcessesByName("Orbit.Input")).ToList();
+        var elevated = new List<int>();
         foreach (var process in processes)
         {
             try
@@ -77,11 +78,36 @@ static class Setup
                 process.Kill();
                 process.WaitForExit(10000);
             }
+            // An Orbit running as administrator cannot be inspected or stopped from here.
+            catch (System.ComponentModel.Win32Exception) { elevated.Add(process.Id); }
             catch { }
             // An open handle to a stopped process keeps its executable locked.
             finally { process.Dispose(); }
         }
+        if (elevated.Count > 0) QuitElevatedOrbit(target, elevated);
         Thread.Sleep(500);
+    }
+
+    // "Orbit.exe --quit" reaches the elevated copy through its own administrator task, which then closes normally.
+    static void QuitElevatedOrbit(string target, List<int> ids)
+    {
+        string orbit = string.IsNullOrEmpty(target) ? null : Path.Combine(target, "Orbit.exe");
+        if (orbit == null || !File.Exists(orbit)) return;
+        try
+        {
+            using (var quit = Process.Start(new ProcessStartInfo(orbit, "--quit") { WorkingDirectory = target, UseShellExecute = false })) quit.WaitForExit(15000);
+        }
+        catch (Exception error) { Log("Elevated Orbit not asked to quit: " + error.Message); return; }
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (DateTime.UtcNow < deadline && ids.Any(IsRunning)) Thread.Sleep(200);
+    }
+
+    // Listing processes needs no handle, unlike HasExited on an elevated process.
+    static bool IsRunning(int id)
+    {
+        var running = Process.GetProcesses();
+        try { return running.Any(process => process.Id == id); }
+        finally { foreach (var process in running) process.Dispose(); }
     }
 
     static void Launch(string target)
@@ -187,7 +213,7 @@ static class Setup
                 }
             }
             if (!IsOrbitFolder(stage) || !File.Exists(Path.Combine(stage, "orbit-release.json"))) throw new InvalidOperationException("Пакет Orbit неповний.");
-            CloseOrbit();
+            CloseOrbit(target);
             bool moved = false;
             if (Directory.Exists(target)) { Retry(() => Directory.Move(target, old)); moved = true; }
             try { Retry(() => Directory.Move(stage, target)); }
@@ -285,7 +311,14 @@ static class Setup
         string target;
         using (var key = Registry.CurrentUser.OpenSubKey(UninstallKey)) target = key == null ? null : key.GetValue("InstallLocation") as string;
         if (!silent && MessageBox.Show("Видалити Orbit з цього комп'ютера?\n\nМеню й налаштування залишаться в %APPDATA%\\Orbit.", "Orbit", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return 1;
-        CloseOrbit();
+        CloseOrbit(target);
+        // The administrator start task belongs to this copy; removing it asks UAC once, so a silent uninstall leaves it.
+        string helper = string.IsNullOrEmpty(target) ? null : Path.Combine(target, "resources", "app.asar.unpacked", "native", "Orbit.Input.exe");
+        if (!silent && helper != null && File.Exists(helper))
+        {
+            try { using (var remove = Process.Start(new ProcessStartInfo(helper, "--admin-task=remove") { CreateNoWindow = true, UseShellExecute = false })) remove.WaitForExit(); }
+            catch (Exception error) { Log("Administrator start task not removed: " + error.Message); }
+        }
         if (!string.IsNullOrEmpty(target) && Directory.Exists(target) && IsOrbitFolder(target)) Retry(() => Directory.Delete(target, true));
         foreach (string link in new[] { StartMenuShortcut, DesktopShortcut }) { try { File.Delete(link); } catch { } }
         try { Registry.CurrentUser.DeleteSubKeyTree(UninstallKey, false); } catch { }

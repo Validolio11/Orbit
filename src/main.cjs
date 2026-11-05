@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
-const { spawn, execFile } = require('node:child_process');
+const { spawn, spawnSync, execFile } = require('node:child_process');
 const { randomUUID } = require('node:crypto');
 const { writeDurable, readWithBackup } = require('./settings-file.cjs');
 const { findRedirectedCopy } = require('./redirect-check.cjs');
@@ -13,6 +13,10 @@ const E2E = process.argv.includes('--e2e');
 const ISOLATED = SMOKE || E2E;
 // Windows starts Orbit with this flag at sign-in; it then waits in the tray without opening its window.
 const HIDDEN = process.argv.includes('--hidden');
+// Task Scheduler starts Orbit with --elevated-task when "start as administrator" is on (native/AdminTask.cs).
+const ELEVATED_TASK = process.argv.includes('--elevated-task');
+// --quit closes a running Orbit, including an elevated one that installers cannot stop themselves.
+const QUIT = process.argv.includes('--quit');
 // Popular programs added to a brand-new wheel when they are installed.
 const FIRST_RUN_APPS = ['Google Chrome', 'Microsoft Edge', 'Firefox', 'Telegram', 'Visual Studio Code', 'Figma', 'Spotify', 'Discord', 'Notion', 'Slack',
   'Microsoft Word', 'Microsoft Excel', 'Zoom', 'Steam', 'Blender', 'OBS Studio'];
@@ -97,7 +101,7 @@ let mainWindow, overlayWindow, tray, state, statePath, quitting = false, hookPro
 let overlayReady, wheelVisible = false, wheelSession = 0, pendingMouseOpen = false, pendingMouseRelease = null, configQueue = Promise.resolve();
 let appliedWheelSize = 520;
 let updater;
-let runtime = { hookReady: false, outsideWatcherReady: false, hookError: null, shortcutRegistered: false };
+let runtime = { hookReady: false, outsideWatcherReady: false, hookError: null, shortcutRegistered: false, adminStart: { available: false, enabled: false, elevated: false } };
 
 function adobeExecutable(product, executable) {
   for (const root of [process.env.ProgramFiles, process.env['ProgramFiles(x86)']].filter(Boolean)) {
@@ -199,13 +203,67 @@ async function logStartup() {
   const file = path.join(app.getPath('userData'), 'startup.log');
   const lines = (await fsp.readFile(file, 'utf8').catch(() => '')).split(/\r?\n/).filter(Boolean).slice(-49);
   const loginItem = app.isPackaged ? app.getLoginItemSettings({ path: process.execPath, args: ['--hidden'] }).openAtLogin : false;
-  lines.push(`${new Date().toISOString()} ${app.getVersion()} ${HIDDEN ? 'autostart' : 'manual'} login-item=${loginItem}`);
+  lines.push(`${new Date().toISOString()} ${app.getVersion()} ${HIDDEN ? 'autostart' : 'manual'} login-item=${loginItem}${ELEVATED_TASK ? ' admin-task' : ''}`);
   await fsp.writeFile(file, lines.join('\n') + '\n', 'utf8');
 }
 
 function applyLoginItem() {
   if (!app.isPackaged || ISOLATED) return;
   try { app.setLoginItemSettings({ openAtLogin: state.launchAtLogin !== false, path: process.execPath, args: ['--hidden'] }); } catch (error) { console.error(error); }
+}
+
+// "Start as administrator" (native/AdminTask.cs): a Task Scheduler task starts Orbit elevated without a UAC prompt,
+// so the side button also reaches programs that run as administrator. Every normal start, including the sign-in
+// entry, hands over to that task before taking the single-instance lock and keeps --hidden or --quit.
+function handOverToAdminTask() {
+  if (process.platform !== 'win32' || !app.isPackaged || ISOLATED || ELEVATED_TASK || !fs.existsSync(NATIVE)) return false;
+  const mode = QUIT ? '--quit' : HIDDEN ? '--hidden' : '--show';
+  return spawnSync(NATIVE, [`--admin-task=start:${mode}`], { windowsHide: true, timeout: 15000 }).status === 0;
+}
+
+// Creating or removing the task waits for the user's UAC answer, so only the status query has a time limit.
+function runAdminTask(command, timeout = 0) {
+  return new Promise(resolve => {
+    execFile(NATIVE, [`--admin-task=${command}`], { windowsHide: true, timeout }, (error, stdout, stderr) =>
+      resolve({ code: error ? (Number.isInteger(error.code) ? error.code : 1) : 0, stdout: String(stdout || ''), stderr: String(stderr || '') }));
+  });
+}
+
+async function refreshAdminStart() {
+  if (!app.isPackaged || ISOLATED || !fs.existsSync(NATIVE)) return;
+  const result = await runAdminTask('status', 15000);
+  try {
+    const status = JSON.parse(result.stdout.trim());
+    updateRuntime({ adminStart: { available: status.available === true, enabled: status.enabled === true, elevated: status.elevated === true } });
+  } catch { console.warn('Orbit: could not read the administrator start status.', result.stderr.trim()); }
+}
+
+// Restarts Orbit with the new rights: elevated through the task, or unelevated through Explorer.
+async function restartWithRights(elevated) {
+  closeWheel(); await configQueue; await stopHook();
+  app.releaseSingleInstanceLock();
+  const started = elevated
+    ? (await runAdminTask('start:--show', 15000)).code === 0
+    : await startProcess(path.join(process.env.WINDIR || 'C:\\Windows', 'explorer.exe'), [process.execPath], { detached: true }).then(() => true, () => false);
+  if (started) { app.quit(); return true; }
+  app.requestSingleInstanceLock(); startHook();
+  return false;
+}
+
+async function setAdminStart(enabled) {
+  if (typeof enabled !== 'boolean') throw new Error('Invalid administrator start preference.');
+  await refreshAdminStart();
+  if (!runtime.adminStart.available) return { ok: false, error: 'Запуск з правами адміністратора доступний у встановленому Orbit для облікового запису адміністратора.' };
+  const result = await runAdminTask(enabled ? 'register' : 'remove');
+  if (result.code === 4) return { ok: false, canceled: true };
+  await refreshAdminStart();
+  if (result.code !== 0 || runtime.adminStart.enabled !== enabled) {
+    return { ok: false, error: `Windows не ${enabled ? 'створив' : 'видалив'} завдання запуску Orbit.${result.stderr.trim() ? ' ' + result.stderr.trim() : ''}` };
+  }
+  if (enabled !== runtime.adminStart.elevated && !(await restartWithRights(enabled))) {
+    return { ok: false, error: 'Налаштування збережено, але Orbit не вдалося перезапустити. Закрийте Orbit і відкрийте його знову.' };
+  }
+  return { ok: true };
 }
 
 async function persistState(value) {
@@ -583,6 +641,11 @@ function registerIPC() {
   updateAction('orbit:download-update', () => updater.download());
   updateAction('orbit:install-update', () => updater.install());
   updateAction('orbit:open-update-repository', () => shell.openExternal(UPDATE_REPOSITORY_URL));
+  ipcMain.handle('orbit:set-admin-start', (event, enabled) => {
+    requireSender(event);
+    if (event.sender !== mainWindow.webContents) throw new Error('Administrator start requires the main Orbit window.');
+    return setAdminStart(enabled);
+  });
   handle('orbit:save-state', saveState);
   handle('orbit:show-wheel', () => showWheel());
   handle('orbit:close-wheel', closeWheel);
@@ -686,11 +749,14 @@ async function smokeTest() {
 app.setName('Orbit');
 if (process.platform === 'win32') app.setAppUserModelId('com.creationsoft.orbit');
 if (!ISOLATED) app.setPath('userData', path.join(app.getPath('appData'), 'Orbit'));
-if (!ISOLATED && !app.requestSingleInstanceLock()) app.quit();
+if (!ISOLATED && (handOverToAdminTask() || !app.requestSingleInstanceLock() || QUIT)) app.quit();
 else {
   app.setName('Orbit');
   if (ISOLATED) app.setPath('userData', path.join(os.tmpdir(), `orbit-${SMOKE ? 'smoke' : 'e2e'}-${process.pid}`));
-  app.on('second-instance', () => showMain());
+  app.on('second-instance', (_event, argv) => {
+    if (argv.includes('--quit')) app.quit();
+    else if (!argv.includes('--hidden')) showMain();
+  });
   app.on('activate', () => showMain());
   app.on('window-all-closed', () => { if (quitting || ISOLATED) app.quit(); });
   app.on('before-quit', event => {
@@ -716,6 +782,7 @@ else {
       onInstallReady: () => app.quit(),
     });
     registerIPC(); await createWindows();
+    refreshAdminStart().catch(() => {});
     if (stateRecoveryFile && !ISOLATED) dialog.showMessageBox(mainWindow, stateRecoveredFromBackup
       ? { type: 'info', title: 'Orbit', message: 'Налаштування Orbit відновлено з резервної копії.', detail: `Основний файл був пошкоджений, тож останні зміни перед цим могли не зберегтися. Пошкоджений файл збережено як:\n${stateRecoveryFile}` }
       : { type: 'warning', title: 'Orbit', message: 'Не вдалося прочитати налаштування Orbit.', detail: `Меню скинуто до початкових. Попередній файл збережено як:\n${stateRecoveryFile}` }).catch(() => {});

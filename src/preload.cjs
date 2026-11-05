@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('orbit', Object.freeze({
   downloadUpdate: () => ipcRenderer.invoke('orbit:download-update'),
   installUpdate: () => ipcRenderer.invoke('orbit:install-update'),
   openUpdateRepository: () => ipcRenderer.invoke('orbit:open-update-repository'),
+  setAdminStart: enabled => ipcRenderer.invoke('orbit:set-admin-start', enabled),
   saveState: state => ipcRenderer.invoke('orbit:save-state', state),
   showWheel: () => ipcRenderer.invoke('orbit:show-wheel'),
   closeWheel: () => ipcRenderer.invoke('orbit:close-wheel'),
