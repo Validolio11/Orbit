@@ -191,3 +191,9 @@ Remaining hardware validation: press Mouse4/Mouse5 on the user's actual mouse, e
 - `IRegisteredTask.Run(param)` was confirmed to pass the start mode as `$(Arg0)` with a temporary test task, which was then deleted. The task only starts the Orbit.exe of the folder that registered it.
 - The installer and uninstaller close an elevated Orbit with `Orbit.exe --quit`; a normal uninstall also removes the task.
 - Unit 70 pass, smoke and `npm run test:ui` pass; the status check reported `available:true` in a mock installed folder layout. The elevated flow with a real UAC confirmation was not run in an installed build.
+
+## Wheel above pinned windows · 0.1.15
+
+- The wheel opened behind a Chrome window. The wheel is always-on-top but is shown without activation, so an always-on-top window activated after it (such as one pinned with PowerToys Always On Top, which runs on this PC) stayed above it. The wheel is now raised to the top of the always-on-top windows on every open, still without taking focus.
+- `npm run test:wheel-add` pins and activates a second always-on-top window over a shown wheel, reopens the wheel and checks the window order with `GetWindow`: it fails without the fix ("below") and passes with it.
+- Unit 70, UI, wheel-add and wheel-drag suites pass.
