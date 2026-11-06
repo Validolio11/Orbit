@@ -24,8 +24,8 @@ const activationNames={release:'Відпускання кнопки',hover:'На
 const groupOpenNames={hover:'Наведення курсора',click:'Клацання мишею'};
 let state,runtime={hookReady:false,hookError:null,shortcutRegistered:false},adminBusy=false;
 let wheelForeground=null;
-let updateStatus={phase:'idle',currentVersion:'0.1.1'};
-let page='menus',selectedId='adobe',groupPath=[],search='',toastTimer,modalPreviousFocus,modalCleanup;
+let updateStatus={phase:'idle',currentVersion:''};
+let page='menus',selectedId='',groupPath=[],search='',toastTimer,modalPreviousFocus,modalCleanup;
 let wheelStack=[],wheelSelected=-1,wheelTrigger='preview',wheelTimer,groupTimer,wheelBusy=false,wheelOpen=false,mousePoint=null,transitionOrigin=null;
 const uuid=()=>crypto.randomUUID();
 const actionsWord=count=>count%10===1&&count%100!==11?'дію':[2,3,4].includes(count%10)&&![12,13,14].includes(count%100)?'дії':'дій';
@@ -48,7 +48,9 @@ async function activateEditorItem(id){
   selectedId=id;actionDialog(id);render();
 }
 function applyTheme(){const theme=state.theme==='system'?(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):state.theme;document.documentElement.dataset.theme=theme;document.documentElement.dataset.reducedMotion=String(state.reducedMotion);}
-function toast(message,error=false){const target=document.querySelector('#toast');clearTimeout(toastTimer);target.textContent=message;target.className='visible'+(error?' error':'');toastTimer=setTimeout(()=>target.className='',error?6000:2500);}
+// Errors thrown in the main process arrive wrapped in Electron's "Error invoking remote method" prefix.
+const cleanError=message=>String(message??'').replace(/^Error invoking remote method '[^']+': (Error: )?/,'');
+function toast(message,error=false){const target=document.querySelector('#toast');clearTimeout(toastTimer);target.textContent=error?cleanError(message):message;target.className='visible'+(error?' error':'');toastTimer=setTimeout(()=>target.className='',error?6000:2500);}
 async function save(next,message){try{state=await api.saveState(next);applyTheme();if(!overlay)render();if(message)toast(message);return true;}catch(error){toast(error.message.replace(/^Error invoking remote method '[^']+': (Error: )?/,''),true);return false;}}
 const change=(changes,message)=>save({...state,...changes},message);
 const actionDrag=overlay?null:bindActionDrag(root,{
@@ -116,9 +118,17 @@ function actionDescription(item){if(item.kind==='group')return `${item.children.
 function actionRow(item,index,library=false,context=''){
   return `<div class="action-row ${selectedId===item.id?'selected':''}" data-row-id="${e(item.id)}" ${!library?`draggable="true" title="Перетягніть у групу" ${item.kind==='group'?`data-drop-group="${e(item.id)}"`:''}`:''} tabindex="0" role="button" aria-label="${item.kind==='group'?'Відкрити':'Редагувати'} ${e(item.name)}">${!library?`<span class="action-number">${String(index+1).padStart(2,'0')}</span>`:''}<span class="action-icon">${itemIcon(item,19)}</span><div class="action-copy"><div class="action-name">${e(item.name)}</div><div class="action-desc" title="${e(actionDescription(item))}">${e(context||actionDescription(item))}</div>${!library&&item.kind==='group'?'<div class="action-drop-message" aria-live="polite"></div>':''}</div>${library?`<span class="type-badge">${kinds[item.kind]}</span>`:''}<div class="action-tools">${!library&&groupPath.length?`<button class="icon-btn move-root" data-move-root="${e(item.id)}" aria-label="Перемістити ${e(item.name)} в головне меню" title="Перемістити в головне меню">${icon('moveRoot',13)}</button>`:''}${!library?`<button class="icon-btn reorder" data-move-id="${e(item.id)}" data-direction="-1" aria-label="Перемістити ${e(item.name)} вище" ${index===0?'disabled':''}>${icon('arrowUp',12)}</button>`:''}${item.kind==='group'?`<button class="icon-btn" data-open-group="${e(item.id)}" aria-label="Відкрити групу ${e(item.name)}">${icon('chevron',15)}</button><button class="icon-btn" data-edit-id="${e(item.id)}" aria-label="Редагувати ${e(item.name)}" title="Редагувати групу">${icon('edit',13)}</button><button class="icon-btn danger" data-delete-group="${e(item.id)}" aria-label="Видалити групу ${e(item.name)}" title="Видалити групу">${icon('trash',13)}</button>`:`<button class="icon-btn" data-edit-id="${e(item.id)}" aria-label="Редагувати ${e(item.name)}">${icon('edit',13)}</button><button class="icon-btn danger" data-delete-action="${e(item.id)}" aria-label="Видалити дію ${e(item.name)}" title="Видалити дію">${icon('trash',13)}</button>`}</div></div>`;
 }
+function libraryEntries(){const query=search.toLowerCase();return flatten().filter(({item,path,menu})=>(item.name+' '+kinds[item.kind]+' '+menu.name+' '+path.join(' ')).toLowerCase().includes(query));}
+function libraryListMarkup(entries){return entries.length?entries.map(({item,path,menu},i)=>actionRow(item,i,true,[menu.name,...path].join(' / '))).join(''):'<div class="empty-state"><strong>Дій не знайдено</strong><p>Спробуйте іншу назву.</p></div>';}
 function libraryPage(){
-  const entries=flatten().filter(({item,path,menu})=>(item.name+' '+kinds[item.kind]+' '+menu.name+' '+path.join(' ')).toLowerCase().includes(search.toLowerCase()));
-  return `<div class="page-header"><div><h1>Усі дії</h1><p>Знайдіть і налаштуйте дію в будь-якому меню.</p></div><button class="btn primary" data-command="add-action">${icon('plus',15)}Додати дію</button></div><div class="library-toolbar"><label class="search-box">${icon('search',16)}<input id="action-search" placeholder="Знайти дію…" aria-label="Знайти дію" value="${e(search)}"></label><span class="micro-label" aria-live="polite">${entries.length} дій</span></div><section class="panel library-list">${entries.length?entries.map(({item,path,menu},i)=>actionRow(item,i,true,[menu.name,...path].join(' / '))).join(''):'<div class="empty-state"><strong>Дій не знайдено</strong><p>Спробуйте іншу назву.</p></div>'}</section>`;
+  const entries=libraryEntries();
+  return `<div class="page-header"><div><h1>Усі дії</h1><p>Знайдіть і налаштуйте дію в будь-якому меню.</p></div><button class="btn primary" data-command="add-action">${icon('plus',15)}Додати дію</button></div><div class="library-toolbar"><label class="search-box">${icon('search',16)}<input id="action-search" placeholder="Знайти дію…" aria-label="Знайти дію" value="${e(search)}"></label><span class="micro-label" id="library-count" aria-live="polite">${entries.length} дій</span></div><section class="panel library-list">${libraryListMarkup(entries)}</section>`;
+}
+// Typing in the search box redraws only the list, so the page and the input itself stay in place.
+function refreshLibraryList(){
+  const list=root.querySelector('.library-list');if(!list){render();return;}
+  const entries=libraryEntries();list.innerHTML=libraryListMarkup(entries);
+  root.querySelector('#library-count').textContent=`${entries.length} дій`;hydrateAppIcons(list);
 }
 function controlsPage(){
   return `<div class="page-header"><div><h1>Керування</h1><p>Налаштуйте мишу та спосіб вибору дій.</p></div></div><div class="settings-stack">
@@ -292,7 +302,7 @@ root.addEventListener('click',async event=>{
   }
   if(button?.dataset.deleteGroup){deleteDialog('action',button.dataset.deleteGroup);return;}
   if(button?.dataset.deleteAction){deleteDialog('action',button.dataset.deleteAction);return;}
-  if(button?.dataset.moveId){const next=structuredClone(state),old=state;state=next;const found=locate(button.dataset.moveId),newIndex=found.index+Number(button.dataset.direction);if(newIndex>=0&&newIndex<found.items.length)[found.items[found.index],found.items[newIndex]]=[found.items[newIndex],found.items[found.index]];state=old;await save(next);return;}
+  if(button?.dataset.moveId){const next=structuredClone(state),old=state;state=next;const found=locate(button.dataset.moveId);if(!found){state=old;return;}const newIndex=found.index+Number(button.dataset.direction);if(newIndex>=0&&newIndex<found.items.length)[found.items[found.index],found.items[newIndex]]=[found.items[newIndex],found.items[found.index]];state=old;await save(next);return;}
   if(button?.dataset.adminStart!==undefined){if(adminBusy)return;adminBusy=true;render();try{const result=await api.setAdminStart(!runtime.adminStart?.enabled);if(!result.ok&&!result.canceled)toast(result.error||'Не вдалося змінити запуск з правами адміністратора.',true);}catch(error){toast(error.message.replace(/^Error invoking remote method '[^']+': (Error: )?/,''),true);}finally{adminBusy=false;render();}return;}
   if(button?.dataset.toggle){const key=button.dataset.toggle;const current=['closeOnOutsideClick','launchAtLogin','wheelAddSlot'].includes(key)?state[key]!==false:state[key];await change({[key]:!current});return;}
   if(button?.dataset.themeValue){await change({theme:button.dataset.themeValue});return;}
@@ -341,7 +351,7 @@ root.addEventListener('input',event=>{
     event.target.setAttribute('aria-valuetext',percent+'%');
     event.target.style.setProperty('--range-progress',(percent-60)/90*100+'%');
   }
-  if(event.target.id==='action-search'){const caret=event.target.selectionStart;search=event.target.value;render();const input=document.querySelector('#action-search');input.focus();input.setSelectionRange(caret,caret);}
+  if(event.target.id==='action-search'){search=event.target.value;refreshLibraryList();}
 });
 document.querySelector('#modal-root').addEventListener('click',event=>{if(event.target.classList.contains('modal-backdrop')||event.target.closest('[data-command="dismiss"]'))closeModal();});
 document.addEventListener('keydown',event=>{

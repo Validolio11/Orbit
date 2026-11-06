@@ -54,7 +54,7 @@ function normalizeCatalog(rows) {
     const key = targetKey(resolvedTarget) + '\0' + resolvedArgs.trim();
     const aliases = Array.isArray(row.aliases) ? row.aliases.filter(alias => typeof alias === 'string' && alias.length <= 100).slice(0, 20) : [];
     const entry = { id: createHash('sha256').update(key).digest('hex').slice(0, 20), name, target, args, source: row.source,
-      _terms: new Set([name, ...aliases].map(normalizeQuery)), _key: key, _resolvedTarget: resolvedTarget, _resolvedArgs: resolvedArgs };
+      _terms: new Set([name, ...aliases].map(normalizeQuery)), _normalizedName: normalizeQuery(name), _key: key, _resolvedTarget: resolvedTarget, _resolvedArgs: resolvedArgs };
     const previous = unique.get(key);
     if (!previous) unique.set(key, entry);
     else {
@@ -68,8 +68,12 @@ function normalizeCatalog(rows) {
 
 function searchCatalog(entries, query = '', limit = 30) {
   const normalized = normalizeQuery(query);
-  const matches = entries.filter(entry => [...entry._terms].some(term => term.includes(normalized)));
-  if (normalized) matches.sort((left, right) => Number(normalizeQuery(right.name).startsWith(normalized)) - Number(normalizeQuery(left.name).startsWith(normalized)));
+  // Runs on every keystroke over up to 5000 programs, so names are normalized once in normalizeCatalog.
+  const matches = normalized ? entries.filter(entry => { for (const term of entry._terms) if (term.includes(normalized)) return true; return false; }) : entries.slice();
+  if (normalized) {
+    const prefix = entry => (entry._normalizedName ?? normalizeQuery(entry.name)).startsWith(normalized);
+    matches.sort((left, right) => Number(prefix(right)) - Number(prefix(left)));
+  }
   return { apps: matches.slice(0, limit).map(({ id, name, target, args, source }) => ({ id, name, target, args, source })), total: matches.length };
 }
 

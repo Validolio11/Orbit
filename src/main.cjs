@@ -282,10 +282,14 @@ async function persistState(value) {
 }
 
 function saveState(value) {
-  const result = configQueue.then(() => persistState(value));
+  const result = configQueue.then(() => persistState(typeof value === 'function' ? value(state) : value));
   configQueue = result.catch(() => {});
   return result;
 }
+
+// A patch is merged into the state that is current when its turn in the queue comes,
+// so it cannot undo a save that was queued just before it.
+function patchState(patch) { return saveState(current => ({ ...current, ...patch })); }
 
 function secureWindow(window) {
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
@@ -420,12 +424,15 @@ async function listScripts() {
   async function walk(folder, depth) {
     if (visited++ > 600 || found.size >= 400) return;
     const entries = await fsp.readdir(folder, { withFileTypes: true }).catch(() => []);
+    // The scripts of one folder are read together; subfolders are still walked one by one to keep the budget.
+    const scripts = entries.filter(entry => entry.isFile() && SCRIPT_EXTENSIONS.has(path.extname(entry.name).toLowerCase()));
+    const stats = await Promise.all(scripts.map(entry => fsp.stat(path.join(folder, entry.name)).catch(() => null)));
+    scripts.forEach((entry, index) => {
+      const full = path.join(folder, entry.name), extension = path.extname(entry.name).toLowerCase();
+      if (stats[index] && found.size < 400) found.set(full.toLowerCase(), { name: path.basename(entry.name, extension), path: full, extension, folder: path.basename(folder), modified: stats[index].mtimeMs });
+    });
     for (const entry of entries) {
-      const full = path.join(folder, entry.name);
-      if (entry.isFile() && SCRIPT_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) {
-        const stat = await fsp.stat(full).catch(() => null);
-        if (stat) found.set(full.toLowerCase(), { name: path.basename(entry.name, path.extname(entry.name)), path: full, extension: path.extname(entry.name).toLowerCase(), folder: path.basename(folder), modified: stat.mtimeMs });
-      } else if (entry.isDirectory() && depth < 2 && !entry.name.startsWith('.') && !SKIPPED_FOLDERS.has(entry.name.toLowerCase())) await walk(full, depth + 1);
+      if (entry.isDirectory() && depth < 2 && !entry.name.startsWith('.') && !SKIPPED_FOLDERS.has(entry.name.toLowerCase())) await walk(path.join(folder, entry.name), depth + 1);
     }
   }
   for (const root of roots) await walk(root, 0);
@@ -456,7 +463,7 @@ async function showWheel(physicalPoint, trigger = 'preview') {
   if (!overlayWindow || overlayWindow.isDestroyed()) return { ok: false, error: 'Wheel unavailable.' };
   const session = ++wheelSession;
   wheelForeground = null;
-  if (trigger !== 'preview' && state.introPending) saveState({ ...state, introPending: false }).catch(() => {});
+  if (trigger !== 'preview' && state.introPending) patchState({ introPending: false }).catch(() => {});
   pendingMouseOpen = trigger === 'mouse';
   pendingMouseRelease = null;
   const point = physicalPoint ? screen.screenToDipPoint(physicalPoint) : screen.getCursorScreenPoint();
@@ -714,8 +721,8 @@ function updateTray() {
     { label: 'Показати колесо', click: () => showWheel().catch(console.error) },
     { label: 'Додати дію…', click: () => showMain({ page: 'menus', groupPath: [], add: true }) },
     ...(state.menus.length > 1 ? [{ label: 'Меню на колесі', submenu: state.menus.map(menu => ({ label: menu.name, type: 'radio', checked: menu.id === state.activeMenuId,
-      click: () => saveState({ ...state, activeMenuId: menu.id }).catch(error => { console.error(error); updateTray(); }) })) }] : []),
-    { label: 'Увімкнено', type: 'checkbox', checked: state.enabled, click: item => saveState({ ...state, enabled: item.checked }).catch(error => { console.error(error); updateTray(); }) },
+      click: () => patchState({ activeMenuId: menu.id }).catch(error => { console.error(error); updateTray(); }) })) }] : []),
+    { label: 'Увімкнено', type: 'checkbox', checked: state.enabled, click: item => patchState({ enabled: item.checked }).catch(error => { console.error(error); updateTray(); }) },
     { type: 'separator' }, { label: 'Вийти з Orbit', click: () => app.quit() },
   ]));
 }
@@ -754,7 +761,6 @@ if (process.platform === 'win32') app.setAppUserModelId('com.creationsoft.orbit'
 if (!ISOLATED) app.setPath('userData', path.join(app.getPath('appData'), 'Orbit'));
 if (!ISOLATED && (handOverToAdminTask() || !app.requestSingleInstanceLock() || QUIT)) app.quit();
 else {
-  app.setName('Orbit');
   if (ISOLATED) app.setPath('userData', path.join(os.tmpdir(), `orbit-${SMOKE ? 'smoke' : 'e2e'}-${process.pid}`));
   app.on('second-instance', (_event, argv) => {
     if (argv.includes('--quit')) app.quit();
