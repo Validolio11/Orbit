@@ -87,6 +87,9 @@ const {execFileSync}=require('node:child_process');
     // Group tab: a suggested name picks a fitting icon, and ticked actions move into the new group in their place.
     const level=(await state()).menus[0].items,first=level.findIndex(item=>item.name==='Документи');
     await page.locator('.panel-head [data-command="add-action"]').click();await form.locator('[data-kind="group"]').click();
+    const glyphs=await form.locator('[data-group-icon]').evaluateAll(nodes=>nodes.map(node=>node.innerHTML));
+    assert.ok(glyphs.length>=60,'The group icon collection offers many icons');
+    assert.equal(new Set(glyphs).size,glyphs.length,'Every group icon draws its own glyph, none falls back to the app icon');
     await form.locator('[data-group-name="Робота"]').click();
     assert.equal(await form.locator('#action-name').inputValue(),'Робота');
     assert.equal(await form.locator('[data-group-icon="briefcase"]').getAttribute('aria-checked'),'true');

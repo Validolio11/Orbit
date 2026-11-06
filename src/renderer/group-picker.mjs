@@ -1,7 +1,16 @@
 import {icon,itemIcon,hydrateAppIcons} from './icons.mjs';
 import {escapeHTML as e} from './wheel.mjs';
 
-const GROUP_ICONS=[['group','Група'],['briefcase','Робота'],['palette','Дизайн'],['gamepad','Ігри'],['browser','Інтернет'],['film','Медіа'],['music','Музика'],['settings','Утиліти'],['star','Обране']];
+// Ordered by theme: favourites and people, communication, creative work, media, internet and AI, computer, study and money, everything else.
+export const GROUP_ICONS=[
+  ['group','Група'],['star','Обране'],['heart','Улюблене'],['bookmark','Закладки'],['briefcase','Робота'],['users','Команда'],['user','Особисте'],['home','Дім'],['calendar','Календар'],
+  ['clock','Час'],['mail','Пошта'],['chat','Чати'],['phone','Телефон'],['palette','Дизайн'],['layers','Шари'],['cube','3D'],['image','Фото'],['camera','Камера'],
+  ['film','Медіа'],['video','Відео'],['tv','ТБ'],['music','Музика'],['headphones','Навушники'],['mic','Мікрофон'],['gamepad','Ігри'],['trophy','Досягнення'],['emoji','Розваги'],
+  ['browser','Інтернет'],['cloud','Хмара'],['wifi','Мережа'],['map','Мапи'],['sparkles','ШІ'],['bot','Бот'],['cpu','Процесор'],['script','Код'],['database','Бази даних'],
+  ['server','Сервер'],['system','Комп’ютер'],['drive','Диск'],['keyboard','Клавіатура'],['settings','Утиліти'],['zap','Швидкі дії'],['rocket','Запуск'],['shield','Захист'],['key','Ключі'],
+  ['lock','Приватне'],['book','Книги'],['graduation','Навчання'],['notepad','Документи'],['clipboard','Нотатки'],['chart','Аналітика'],['wallet','Фінанси'],['cart','Покупки'],['calculator','Розрахунки'],
+  ['box','Архів'],['printer','Друк'],['folder','Папки'],['app','Програми'],['flask','Наука'],['leaf','Природа'],['coffee','Перерва'],['gift','Подарунки'],['tag','Мітки'],
+];
 // A suggested name also picks a fitting icon unless the user already chose one.
 const SUGGESTIONS=[['Робота','briefcase'],['Дизайн','palette'],['Ігри','gamepad'],['Браузери','browser'],['Медіа','film'],['Утиліти','settings']];
 
