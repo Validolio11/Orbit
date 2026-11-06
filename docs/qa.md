@@ -197,3 +197,11 @@ Remaining hardware validation: press Mouse4/Mouse5 on the user's actual mouse, e
 - The wheel opened behind a Chrome window. The wheel is always-on-top but is shown without activation, so an always-on-top window activated after it (such as one pinned with PowerToys Always On Top, which runs on this PC) stayed above it. The wheel is now raised to the top of the always-on-top windows on every open, still without taking focus.
 - `npm run test:wheel-add` pins and activates a second always-on-top window over a shown wheel, reopens the wheel and checks the window order with `GetWindow`: it fails without the fix ("below") and passes with it.
 - Unit 70, UI, wheel-add and wheel-drag suites pass.
+
+## App audit and group icons · 0.1.16
+
+- Tray toggles, the tray menu switch and the first-run flag were written later through the save queue with a copy of the state taken at click time, so they could undo a save queued just before them. `patchState` now merges the change into the state current when its turn comes.
+- Library search redraws only the list instead of the whole window; app search normalizes names once per catalog; script discovery stats a folder's files in parallel.
+- Error toasts drop Electron's "Error invoking remote method" prefix; moving an action that was already removed no longer throws; stale renderer defaults are gone. Electron 45.2.3, Playwright 1.65.0.
+- The group editor offers 63 icons instead of 9, ordered by theme. `npm run test:wheel-add` checks that every icon draws its own glyph.
+- Unit 70, smoke, UI, search, drag, wheel-add, wheel-drag, icons and updates suites pass. One wheel-add run timed out on the "+" step and passed on rerun.
