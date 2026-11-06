@@ -3,6 +3,7 @@ const assert=require('node:assert/strict');
 const path=require('node:path');
 const fs=require('node:fs/promises');
 const os=require('node:os');
+const {execFileSync}=require('node:child_process');
 
 // The wheel's "+" slot: adding the program in front, the add-dialog fallback, and the first-run hint.
 (async()=>{
@@ -98,6 +99,22 @@ const os=require('node:os');
     assert.equal(after.length,level.length-1);assert.equal(after.some(item=>moved.includes(item.id)),false);
     await page.locator('[data-command="group-back"]').waitFor();
     console.log('PASS: group gets a suggested name and icon, takes the ticked actions and opens');
+
+    // A window pinned on top (PowerToys Always On Top) and activated after the wheel was shown must not cover it.
+    const handles=await app.evaluate(async({BrowserWindow})=>{
+      const handle=window=>Number(window.getNativeWindowHandle().readBigUInt64LE());
+      const overlayWindow=BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().includes('overlay=1'));
+      await globalThis.__orbitE2E.showWheel();overlayWindow.hide();
+      const pinned=new BrowserWindow({width:400,height:400,alwaysOnTop:true,show:false});pinned.setAlwaysOnTop(true,'screen-saver');
+      pinned.show();pinned.focus();await new Promise(resolve=>setTimeout(resolve,200));
+      await globalThis.__orbitE2E.showWheel();await new Promise(resolve=>setTimeout(resolve,200));
+      return {overlay:handle(overlayWindow),pinned:handle(pinned)};
+    });
+    const above=execFileSync('powershell',['-NoProfile','-Command',`Add-Type -Name W -Namespace Z -MemberDefinition '[DllImport("user32.dll")] public static extern System.IntPtr GetWindow(System.IntPtr h, uint c);'
+      $h=[System.IntPtr]${handles.pinned};while(($h=[Z.W]::GetWindow($h,3)) -ne [System.IntPtr]::Zero){if($h -eq [System.IntPtr]${handles.overlay}){'above';exit}};'below'`],{encoding:'utf8'}).trim();
+    assert.equal(above,'above','The wheel must open above a window pinned on top');
+    await app.evaluate(({BrowserWindow})=>{for(const w of BrowserWindow.getAllWindows())if(!w.webContents.getURL().startsWith('file:'))w.destroy();});
+    console.log('PASS: the wheel opens above a window pinned on top that was activated later');
     assert.deepEqual(errors,[]);
     console.log('ORBIT_WHEEL_ADD_OK');
   }finally{await app.close();}

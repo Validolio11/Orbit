@@ -473,6 +473,9 @@ async function showWheel(physicalPoint, trigger = 'preview') {
   overlayWindow.webContents.send('orbit:wheel-open', { center, trigger, size: appliedWheelSize });
   if (trigger === 'mouse') overlayWindow.showInactive();
   else overlayWindow.show();
+  // A window pinned on top (e.g. PowerToys Always On Top) and activated later sits above the
+  // hidden wheel; raise the wheel to the top of the always-on-top windows on every open.
+  overlayWindow.moveTop();
   pendingMouseOpen = false;
   if (pendingMouseRelease) { overlayWindow.webContents.send('orbit:trigger-release', pendingMouseRelease); pendingMouseRelease = null; }
   if (!ISOLATED) globalShortcut.register('Escape', closeWheel);
@@ -793,7 +796,7 @@ else {
     if (app.isPackaged && !ISOLATED) updater.reportFailedInstall().catch(error => console.warn('Orbit: could not read the last update result.', error));
     if (SMOKE) { await smokeTest(); app.quit(); return; }
     appCatalog.warm();
-    if (E2E) { globalThis.__orbitE2E = { resolveForeground: exePath => resolveForeground(exePath, wheelSession) }; return; }
+    if (E2E) { globalThis.__orbitE2E = { resolveForeground: exePath => resolveForeground(exePath, wheelSession), showWheel: point => showWheel(point, 'mouse') }; return; }
     createTray();
     if (firstRun) seedFirstRunApps().catch(() => {});
     updateRuntime({ shortcutRegistered: globalShortcut.register('Control+Space', () => {
