@@ -1,12 +1,8 @@
-node_modules/
-dist/
-test-results/
-playwright-report/
+target/
+release/
 output/
-native/Orbit.Input.exe
 *.log
 docs/*.png
 .env
 .env.*
 *.local.json
-release/

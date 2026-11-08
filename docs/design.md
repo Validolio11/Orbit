@@ -40,4 +40,4 @@ Primary: https://vercel.com/geist/introduction
 
 ## Scope
 
-Native Windows desktop app, Electron UI with isolated preload, local persistence, native XBUTTON1/XBUTTON2 listener. No account or cloud connection. Native side-button support must be verified on actual hardware, especially vendor-remapped buttons.
+Native Windows desktop app in Rust (egui interface, Win32 services), local persistence, native XBUTTON1/XBUTTON2 listener. No account or cloud connection. Native side-button support must be verified on actual hardware, especially vendor-remapped buttons.

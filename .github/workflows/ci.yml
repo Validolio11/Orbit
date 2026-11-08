@@ -1,0 +1,31 @@
+name: Build Orbit
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Rust toolchain
+        run: rustup update stable --no-self-update && rustup default stable
+      - run: cargo test --locked
+      - run: cargo build --release --locked
+      - name: Executable starts and passes its self-test
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath target\release\orbit.exe -ArgumentList '--self-test' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Self-test failed with exit code $($p.ExitCode)." }
+      - uses: actions/upload-artifact@v5
+        with:
+          name: Orbit-windows-x64
+          path: target/release/orbit.exe

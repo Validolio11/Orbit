@@ -1,3 +1,5 @@
+> Цей журнал перевірок стосується версії на Electron (0.1.x).
+
 # Orbit QA inventory
 
 User-visible requirements and implementation checks:
