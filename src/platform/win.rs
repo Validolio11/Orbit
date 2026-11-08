@@ -1,3 +1,6 @@
+// Win32 calls are unsafe throughout; the unsafe fns here are thin wrappers around them.
+#![allow(unsafe_op_in_unsafe_fn)]
+
 //! Windows services: the low-level mouse hook, Ctrl + Space, the tray icon, program launching,
 //! Shell icons, the sign-in entry and "start as administrator".
 //!
@@ -13,6 +16,7 @@ use windows::Win32::Graphics::Gdi::*;
 use windows::Win32::System::Com::*;
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Registry::*;
+use windows::Win32::System::Shutdown::LockWorkStation;
 use windows::Win32::System::Threading::*;
 use windows::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
 use windows::Win32::UI::Input::KeyboardAndMouse::*;
