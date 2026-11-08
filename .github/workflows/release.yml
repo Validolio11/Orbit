@@ -44,12 +44,14 @@ jobs:
           $setup = Start-Process -FilePath "release\Orbit-Setup-$env:ORBIT_VERSION.exe" -ArgumentList '--silent', '--nolaunch' -Wait -PassThru
           if ($setup.ExitCode -ne 0) { throw 'Installer failed.' }
           if (-not (Test-Path "$env:LOCALAPPDATA\Programs\Orbit\Orbit.exe")) { throw 'Orbit.exe was not installed.' }
+      # A pushed tag publishes its own release; "Run workflow" on main tags the current commit with the Cargo.toml version.
       - name: Publish release assets
-        if: github.ref_type == 'tag'
+        if: github.ref_type == 'tag' || github.ref == 'refs/heads/main'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "v$env:ORBIT_VERSION" "release/Orbit-$env:ORBIT_VERSION-windows-x64.exe" "release/Orbit-Setup-$env:ORBIT_VERSION.exe" "release/SHA256SUMS.txt" --verify-tag --title "Orbit $env:ORBIT_VERSION" --generate-notes --draft
+          $target = if ($env:GITHUB_REF_TYPE -eq 'tag') { @('--verify-tag') } else { @('--target', $env:GITHUB_SHA) }
+          gh release create "v$env:ORBIT_VERSION" "release/Orbit-$env:ORBIT_VERSION-windows-x64.exe" "release/Orbit-Setup-$env:ORBIT_VERSION.exe" "release/SHA256SUMS.txt" @target --title "Orbit $env:ORBIT_VERSION" --generate-notes --draft
           if ($LASTEXITCODE -ne 0) { throw 'Release upload failed.' }
           gh release edit "v$env:ORBIT_VERSION" --draft=false --latest

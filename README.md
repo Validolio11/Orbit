@@ -75,6 +75,8 @@ git tag v0.2.0
 git push origin main --follow-tags
 ```
 
+Або без терміналу: GitHub → Actions → «Release Orbit» → «Run workflow» на гілці `main` — тег `v<версія з Cargo.toml>` створиться сам.
+
 GitHub Actions на Windows запускає тести, збирає `Orbit.exe`, перевіряє його запуск і встановлення та публікує GitHub Release з контрольними сумами. Версія тегу має збігатися з `Cargo.toml`. Кожен push також збирає `Orbit.exe` як артефакт робочого процесу «Build Orbit».
 
 ## Структура
